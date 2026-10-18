@@ -1,0 +1,8 @@
+# Test image: Debian's Intel media driver + BtbN's static ffmpeg (has libvmaf, libvpl/QSV, vaapi)
+FROM debian:trixie-slim
+RUN sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources \
+ && apt-get update && apt-get install -y --no-install-recommends intel-media-va-driver-non-free libmfx-gen1.2 libvpl2 ca-certificates curl xz-utils \
+ && curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz | tar -xJ -C /opt \
+ && ln -s /opt/ffmpeg-n8.1-latest-linux64-gpl-8.1/bin/ffmpeg /opt/ffmpeg-n8.1-latest-linux64-gpl-8.1/bin/ffprobe /usr/local/bin/ \
+ && apt-get purge -y curl xz-utils && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+ENV LIBVA_DRIVERS_PATH=/usr/lib/x86_64-linux-gnu/dri LIBVA_DRIVER_NAME=iHD

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Reencoder</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" type="image/png" href="/static/favicon-32.png">
+</head>
+<body>
+    <header class="top">
+        <div class="brand">
+            <picture>
+                <source media="(prefers-color-scheme: dark)" srcset="/static/logo-on-dark.svg">
+                <img src="/static/logo.svg" alt="">
+            </picture>
+            <span class="name">Reencoder</span>
+        </div>
+        <nav class="controls">
+            <span id="mode" class="badge"></span>
+            <button id="pause" class="btn btn-primary">Pause</button>
+            <label for="parallel">Encodes at once</label>
+            <input type="number" id="parallel" min="1" max="5">
+            <span id="conn" class="pill"></span>
+            <a href="/overview">Overview</a>
+        </nav>
+    </header>
+
+    <main>
+        <section id="tiles">
+            <div class="tile">
+                <div class="tile-label">Library size</div>
+                <div class="tile-value"></div>
+                <div class="tile-sub"></div>
+            </div>
+            <div class="tile">
+                <div class="tile-label">Size now</div>
+                <div class="tile-value"></div>
+                <div class="tile-sub"></div>
+            </div>
+            <div class="tile">
+                <div class="tile-label">Saved so far</div>
+                <div class="tile-value"></div>
+                <div class="tile-sub"></div>
+            </div>
+            <div class="tile">
+                <div class="tile-label">Projected when done</div>
+                <div class="tile-value"></div>
+                <div class="tile-sub"></div>
+            </div>
+        </section>
+
+        <div id="notice" role="status" hidden></div>
+
+        <section id="space" class="card">
+            <h2>Space used by copies waiting for confirm</h2>
+            <div class="bar">
+                <div id="space-fill" class="fill"></div>
+            </div>
+            <p id="space-text"></p>
+        </section>
+
+        <section id="chart" class="card">
+            <h2>Space per library</h2>
+            <div id="libchart"></div>
+        </section>
+
+        <section id="jobs" class="card">
+            <h2>Encoding now</h2>
+            <p id="sysline"></p>
+            <div id="job-list"></div>
+        </section>
+
+        <nav class="toolbar">
+            <input type="search" id="q" placeholder="Search series or movies" aria-label="Search series or movies">
+            <select id="filter">
+                <option value="all">All</option>
+                <option value="notstarted">Not started</option>
+                <option value="partial">Partly done</option>
+                <option value="ready">Ready to confirm</option>
+                <option value="done">Done</option>
+                <option value="skipped">Skipped</option>
+            </select>
+            <div class="viewsw">
+                <button id="view-grid" class="btn" aria-pressed="true"></button>
+                <button id="view-list" class="btn"></button>
+            </div>
+        </nav>
+
+        <section id="folders"></section>
+    </main>
+
+    <dialog id="detail">
+        <div class="detail-header">
+            <h3 id="detail-title"></h3>
+            <p id="detail-sum"></p>
+            <button id="detail-close" class="btn" aria-label="Close">×</button>
+        </div>
+        <div id="detail-actions"></div>
+        <div id="compare" hidden></div>
+        <div id="detail-body"></div>
+        <div class="detail-footer">
+            <a id="detail-json" class="btn" download="encoding_report.json">Download encoding_report.json</a>
+        </div>
+    </dialog>
+
+    <script src="/static/chart.js" defer></script>
+    <script src="/static/compare.js" defer></script>
+    <script src="/static/detail.js" defer></script>
+    <script src="/static/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Reencoder overview</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" type="image/png" href="/static/favicon-32.png">
+</head>
+<body>
+    <header class="top">
+        <div class="brand">
+            <picture>
+                <source media="(prefers-color-scheme: dark)" srcset="/static/logo-on-dark.svg">
+                <img src="/static/logo.svg" alt="">
+            </picture>
+            <span class="name">Reencoder</span>
+        </div>
+        <nav class="nav">
+            <a href="/" class="navlink">Library</a>
+            <a href="/overview" class="navlink active" aria-current="page">Overview</a>
+        </nav>
+    </header>
+
+    <main class="overview">
+        <section id="hero" class="card">
+            <div class="hero-num" id="saved-big"></div>
+            <p id="saved-sub"></p>
+            <div id="hero-stats">
+                <div class="tile">
+                    <div class="tile-label">Total size</div>
+                    <div class="tile-value"></div>
+                </div>
+                <div class="tile">
+                    <div class="tile-label">Saved</div>
+                    <div class="tile-value"></div>
+                </div>
+                <div class="tile">
+                    <div class="tile-label">Projected</div>
+                    <div class="tile-value"></div>
+                </div>
+                <div class="tile">
+                    <div class="tile-label">Efficiency</div>
+                    <div class="tile-value"></div>
+                </div>
+            </div>
+        </section>
+
+        <div class="ov-grid">
+            <section id="ch-donut" class="card">
+                <h2>Where the space went</h2>
+                <div class="chartbox" id="donut-box"></div>
+            </section>
+            <section id="ch-history" class="card">
+                <h2>Space saved over time</h2>
+                <div class="chartbox" id="history-box"></div>
+            </section>
+            <section id="ch-libs" class="card">
+                <h2>Per library: before, now, projected</h2>
+                <div class="chartbox" id="libs-box"></div>
+            </section>
+            <section id="ch-top" class="card">
+                <h2>Top 10 series by savings</h2>
+                <div class="chartbox" id="top-box"></div>
+            </section>
+            <section id="ch-codecs" class="card">
+                <h2>Codecs before and after</h2>
+                <div class="chartbox" id="codecs-box"></div>
+            </section>
+            <section id="ch-live" class="card">
+                <h2>Encoder load (CPU and memory)</h2>
+                <div class="chartbox" id="live-box"></div>
+            </section>
+        </div>
+
+        <section id="now" class="card">
+            <h2>Encoding now</h2>
+            <div id="now-list"></div>
+        </section>
+    </main>
+
+    <script src="/static/echarts.min.js" defer></script>
+    <script src="/static/overview.js" defer></script>
+</body>
+</html>
