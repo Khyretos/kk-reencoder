@@ -551,30 +551,14 @@
     }
 
     function getFolderStateClass(folder) {
-        const { pending, running, staged, confirmed, encoded, predicted, skipped, files, current_bytes, original_bytes } = folder || {};
-        const handled = encoded + predicted + staged + confirmed;
-        const totalHandledOrPending = handled + pending;
-
-        if (pending === 0 && running === 0 && staged === 0 && confirmed === 0 && encoded > 0 && predicted > 0) {
-            return 'done';
-        }
-        if (staged > 0) {
-            return 'ready';
-        }
-        if (handled > 0 && pending > 0) {
-            return 'partial';
-        }
-        if (skipped === files && files > 0) {
-            return 'skipped';
-        }
-        if (totalHandledOrPending === 0) {
-            return 'notstarted';
-        }
-        // Check for empty bytes values which cause the gradient error
-        if (current_bytes === null || current_bytes === undefined || original_bytes === null || original_bytes === undefined) {
-            return 'partial';
-        }
-        return 'partial'; // fallback
+        const f = folder || {};
+        const left = (f.pending || 0) + (f.running || 0);
+        const handled = (f.encoded || 0) + (f.predicted || 0) + (f.staged || 0) + (f.confirmed || 0) + (f.skipped || 0);
+        if (f.staged > 0) return 'ready';
+        if (f.files > 0 && f.skipped === f.files) return 'skipped';
+        if (left === 0 && handled > 0) return 'done';
+        if (handled > 0 && left > 0) return 'partial';
+        return 'notstarted';
     }
 
     function setStatusChip(chip, state, folder) {
