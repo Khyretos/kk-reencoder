@@ -121,17 +121,10 @@
         els.q.addEventListener('input', debounce(renderFolders, 300));
         els.filter.addEventListener('change', renderFolders);
 
-        // Detail Dialog
-        els.detailClose.addEventListener('click', () => closeDetail());
-        els.detailJson.addEventListener('click', downloadReport);
-        
-        // Close dialog on backdrop click
+        // Detail dialog: detail.js opens it and wires the close button and the download link;
+        // here only a tap on the dark backdrop closes it (Escape / phone back close a modal dialog natively)
         els.detail.addEventListener('click', (e) => {
             if (e.target === els.detail) closeDetail();
-        });
-        // Close on Escape
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !els.detail.hidden) closeDetail();
         });
 
         // Encode Selected Buttons (created once, after #filter)
@@ -770,15 +763,10 @@
 
     // --- Detail Dialog Helpers ---
 
-    function downloadReport() {
-        // This would ideally fetch the report endpoint with params
-        // For now, just a placeholder or fetch if we had the params
-        alert("Download feature requires specific library/folder params passed to detail.");
-    }
-
     function closeDetail() {
-        els.detail.hidden = true;
-        els.detail.showModal = false;
+        // close() ends the modal state; hiding it or overwriting showModal left the whole page inert
+        // (no taps on Grid/List or the checkboxes) after a series window had been closed
+        if (els.detail.open) els.detail.close();
     }
 
     // Expose refresh function for detail.js

@@ -104,7 +104,7 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     parallel = parse_int(env.get("RX_PARALLEL", "2"), 2, 1, 5)
 
     # Optional CPU filters per library, like 'Anime=deband'. Default none: the deband filter only runs on
-    # the CPU and made anime ~5x slower than the full-GPU path (Kees chose speed, 2026-10-19).
+    # the CPU and made anime ~5x slower than the full-GPU path (off by default for speed).
     filters_raw = env.get("RX_FILTERS", "")
     filters: Dict[str, str] = {}
     for item in filters_raw.split(","):
