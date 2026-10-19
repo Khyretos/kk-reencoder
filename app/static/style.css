@@ -598,6 +598,10 @@ button.btn-prio {
   color: var(--kk-plum);
   border: none;
 }
+/* the generic .btn hover would make it transparent and leave plum text on the dark card */
+button.btn-prio:hover:not([disabled]) {
+  background: #f7ae55;
+}
 
 div.folder-grid {
   display: grid;
@@ -1375,3 +1379,21 @@ span.status-chip.queued { background: #f15bb5; color: #1c1329; }
 .q-gsum { flex: 1 1 100%; padding-left: 22px; }
 .q-group.q-folded .q-gsum { display: inline; }
 @media (max-width: 640px) { .q-gtoggle .hint { flex-basis: 100%; padding-left: 22px; } }
+
+/* "Up next": the row flashes where it landed in the queue, and a note says what happened */
+.q-row.q-flash { animation: q-flash 2.2s ease-out; }
+@keyframes q-flash { 0%, 35% { background: var(--q-tint); box-shadow: 0 0 0 2px var(--q-accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+#rx-toast { position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 16px); opacity: 0; pointer-events: none; z-index: 50;
+  display: flex; gap: 12px; align-items: baseline; width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 10px 14px; border-radius: 10px;
+  background: #2c1f3f; color: #f4eefc; border: 1px solid #5c398e; border-left: 4px solid #f3941f; box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  transition: opacity .2s ease, transform .2s ease; }
+#rx-toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#rx-toast a { color: #f3941f; font-weight: 600; white-space: nowrap; }
+@media (prefers-color-scheme: light) {
+  #rx-toast { background: #fff; color: #1c1329; border-color: #b9a3dc; border-left-color: #8a5a00; box-shadow: 0 8px 24px rgba(28,19,41,.18); }
+  #rx-toast a { color: #8a5a00; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .q-row.q-flash { animation: none; background: var(--q-tint); box-shadow: 0 0 0 2px var(--q-accent); }
+  #rx-toast { transition: none; }
+}

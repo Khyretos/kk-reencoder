@@ -4,7 +4,7 @@
 // Reordering sets the series' priorities on the server, like the CI queue page does for jobs.
 (function () {
   const SHOW = 30;   // rows per group before "Show all"
-  let latest = null, dragging = null, expanded = {};
+  let latest = null, dragging = null, expanded = {}, flashKey = null;
 
   function fmt(b) {
     if (!b || b < 1) return '0 B';
@@ -66,6 +66,7 @@
     out.title = 'Take out of the queue (pauses this series)';
     out.setAttribute('aria-label', 'Take ' + title(it.name) + ' out of the queue');
     li.append(grip, num, body, chips, top, out);
+    if (flashKey === li.dataset.key) li.classList.add('q-flash');
     return li;
   }
 
@@ -221,6 +222,13 @@
     const now = orderNow(d.list);
     if (now.map(o => o.library + '/' + o.folder).join('|') !== d.start) sendOrder(now);
   }
+
+  // "Up next" on a series card: refresh now and flash that row where it landed
+  window.addEventListener('rx:upnext', e => {
+    flashKey = e.detail.key;
+    setTimeout(() => { flashKey = null; }, 2500);
+    setTimeout(load, 150);
+  });
 
   function init() {
     load();

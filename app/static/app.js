@@ -565,6 +565,8 @@
         // only useful while the series still has files waiting
         prioBtn.disabled = !(folder.pending > 0);
         if (prioBtn.disabled) prioBtn.title = 'Nothing left to do in this series';
+        else prioBtn.title = (state.mode === 'manual' && !folder.encode)
+            ? 'Measure this series first (tick Encode to re-encode it)' : 'Encode this series next';
         prioBtn.onclick = () => changePriority(folder.library, folder.name, folder.priority + 1);
 
         const pauseBtn = document.createElement('button');
@@ -805,7 +807,36 @@
         // "Up next": one above the highest priority of all series
         const top = Math.max(0, ...Object.values(state.foldersCache).map(f => f.priority || 0));
         await post('/api/folder', { library, folder, priority: Math.max(newPriority, top + 1) });
+        // the card keeps its place (cards sort by name); the queue shows the change, so say so and flash the row there
+        const f = cached(library, folder);
+        const what = (state.mode === 'manual' && !f.encode) ? 'measure' : 'encode';
+        showToast(`${displayName({ name: folder })} is now first to ${what}.`, 'See queue', '#queue');
+        window.dispatchEvent(new CustomEvent('rx:upnext', { detail: { key: `${library}/${folder}` } }));
         fetchFoldersAndLibraries();
+    }
+
+    let toastTimer = null;
+    function showToast(text, linkText, href) {
+        let t = document.getElementById('rx-toast');
+        if (!t) {
+            t = document.createElement('div');
+            t.id = 'rx-toast';
+            t.setAttribute('role', 'status');
+            document.body.appendChild(t);
+        }
+        const msg = document.createElement('span');
+        msg.textContent = text;
+        t.replaceChildren(msg);
+        if (linkText) {
+            const a = document.createElement('a');
+            a.href = href;
+            a.textContent = linkText;
+            a.addEventListener('click', () => t.classList.remove('show'));
+            t.appendChild(a);
+        }
+        t.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => t.classList.remove('show'), 4000);
     }
 
     async function toggleFolderPause(library, folder) {
