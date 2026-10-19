@@ -6,7 +6,7 @@ window.KKDetail = {
     this.folder = folder;
     this.onChange = onChange;
     
-    document.getElementById('detail-title').textContent = folder;
+    document.getElementById('detail-title').textContent = folder.split('/').pop();
     const dlg = document.getElementById('detail');
     if (!dlg.open) dlg.showModal();
     if (!this.wired) {

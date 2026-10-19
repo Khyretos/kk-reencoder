@@ -182,7 +182,7 @@
             legend: { show: false },
             grid: { left: 120, right: 60, top: 10, bottom: 30 },
             tooltip: Object.assign(base().tooltip, { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: fmtBytes }),
-            xAxis: byteAxis(), yAxis: catAxis(rows.map(r => r.name)),
+            xAxis: byteAxis(), yAxis: catAxis(rows.map(r => r.name.split('/').pop())),
             series: [{
                 name: 'Saved', type: 'bar', data: rows.map(r => r.saved_bytes), barMaxWidth: 26,
                 itemStyle: { borderRadius: [0, 8, 8, 0], color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: C.neon }, { offset: 1, color: C.orange }]) },

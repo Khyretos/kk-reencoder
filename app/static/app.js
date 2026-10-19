@@ -363,6 +363,19 @@
 
     // --- Folder Rendering Logic ---
 
+    // "Animated/Frozen II (2019)" in library Movies -> title "Frozen II (2019)", tags animated + movie
+    const LIBRARY_TAG = { anime: 'anime', series: 'series', movies: 'movie', cartoons: 'cartoon' };
+    const SKIP_TAG = new Set(['regular', 'other', 'misc']);
+    function displayName(f) {
+        return (f.name || '').split('/').pop();
+    }
+    function folderTags(f) {
+        const lib = (f.library || '').toLowerCase();
+        const cats = (f.name || '').split('/').slice(0, -1).map(c => c.toLowerCase()).filter(c => !SKIP_TAG.has(c));
+        const tags = [...cats, LIBRARY_TAG[lib] || lib];
+        return [...new Set(tags.map(t => LIBRARY_TAG[t] || t))];
+    }
+
     // the line next to the status chip: what is left, or what was saved
     function setStatusText(text, state, folder) {
         text.className = 'status-text';
@@ -389,11 +402,11 @@
         // Get all unique keys from cache
         const keys = Object.keys(state.foldersCache);
         
-        // Filter by search
+        // Filter by search (title or any tag), then sort by the title people see
         const filteredKeys = keys.filter(k => {
-            const [lib, name] = k.split('/');
-            return lib.toLowerCase().includes(query) || name.toLowerCase().includes(query);
-        });
+            const f = state.foldersCache[k];
+            return displayName(f).toLowerCase().includes(query) || folderTags(f).some(t => t.includes(query));
+        }).sort((a, b) => displayName(state.foldersCache[a]).localeCompare(displayName(state.foldersCache[b]), undefined, { sensitivity: 'base' }));
 
         // Filter by state
         const finalKeys = filteredKeys.filter(k => {
@@ -443,13 +456,16 @@
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'folder-name';
-        nameSpan.textContent = folder.name;
+        nameSpan.textContent = displayName(folder);
+        nameSpan.title = `${folder.library}/${folder.name}`;
         header.appendChild(nameSpan);
 
-        const chip = document.createElement('span');
-        chip.className = 'chip';
-        chip.textContent = folder.library;
-        header.appendChild(chip);
+        folderTags(folder).forEach(tag => {
+            const chip = document.createElement('span');
+            chip.className = 'chip';
+            chip.textContent = tag;
+            header.appendChild(chip);
+        });
 
         // Buttons
         const btnGroup = document.createElement('div');
