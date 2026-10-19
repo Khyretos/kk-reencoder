@@ -20,6 +20,10 @@ if (tileValues.length !== 4 || tileValues.some(t => !/\d/.test(t))) problems.pus
 const cards = await lib.locator('#folders .folder').count();
 if (cards < 1) problems.push('error: app.js: no .folder cards rendered in #folders');
 if ((await lib.locator('#libchart > *').count()) < 1) problems.push('error: chart.js: #libchart is empty');
+const libsApi = await (await fetch(base + '/api/libraries')).json();
+await lib.waitForTimeout(11000);  // the library chart redraws every 10 s
+const chartRows = await lib.locator('#libchart .kk-chart-row').count();
+if (chartRows !== libsApi.length) problems.push(`error: chart.js: #libchart has ${chartRows} rows for ${libsApi.length} libraries after a redraw`);
 if (!/Live/.test(await lib.locator('#conn').textContent())) problems.push('error: app.js: #conn does not say Live');
 if (cards) {
   await lib.locator('#folders .folder').first().click({ position: { x: 10, y: 10 } });

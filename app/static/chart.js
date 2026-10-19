@@ -114,6 +114,6 @@ window.KKChart = {
     legend.appendChild(createLegendItem('Projected', 'kk-chart-legend-proj'));
     
     rowsContainer.appendChild(legend);
-    el.appendChild(rowsContainer);
+    el.replaceChildren(rowsContainer);  // redraw in place: a poll must not add another set of rows
   }
 };
