@@ -1,5 +1,12 @@
 'use strict';
 
+function shortName(name, folder) {
+  let n = name.replace(/\.[a-z0-9]{2,4}$/i, '');
+  const series = folder.split('/').pop().toLowerCase();
+  if (n.toLowerCase().startsWith(series + ' - ')) n = n.slice(series.length + 3);
+  return n;
+}
+
 window.KKDetail = {
   open: function(library, folder, onChange) {
     this.library = library;
@@ -95,7 +102,8 @@ window.KKDetail = {
       
       // File name
       const tdName = document.createElement('td');
-      tdName.textContent = file.name || file.path.split('/').pop();
+      tdName.textContent = shortName(file.name || file.path.split('/').pop(), this.folder);
+      tdName.title = file.name || '';
       tr.appendChild(tdName);
 
       // Status chip

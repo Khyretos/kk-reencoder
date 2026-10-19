@@ -26,6 +26,9 @@ class Config(unittest.TestCase):
         self.assertEqual(c["filters"], {"Anime": "deband", "Cartoons": "deband"})
         self.assertEqual(c["min_kbps"]["1080"], 2500)
         self.assertTrue(c["skip_hdr"])
+        # everything the service keeps lives in the /data volume, never in the container's /tmp
+        for k in ("work_dir", "report_dir", "frames_dir", "db"):
+            self.assertTrue(c[k].startswith("/data/"), k)
         self.assertIn("h264", c["codecs"])
 
     def test_overrides_and_bad_mode(self):

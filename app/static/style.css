@@ -1138,3 +1138,34 @@ header.top { position: static; }
 /* ~900 cards: let the browser skip layout and paint of cards that are off screen */
 .folder { content-visibility: auto; contain-intrinsic-size: auto 210px; }
 #folders.list .folder { contain-intrinsic-size: auto 90px; }
+
+/* ---- compare view (compare.js) ---- */
+#compare .cmp { position: relative; width: 100%; aspect-ratio: 16 / 9; height: auto; background: #000; border-radius: 12px; overflow: hidden; touch-action: none; cursor: ew-resize; user-select: none; }
+#compare .cmp-stage { position: absolute; inset: 0; transform-origin: 50% 50%; transition: transform .2s ease; }
+#compare .cmp-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; -webkit-user-drag: none; }
+#compare .cmp-handle { position: absolute; top: 0; bottom: 0; height: auto; width: 3px; margin-left: -1.5px; background: #f3941f; box-shadow: 0 0 0 1px rgba(12,9,23,.6), 0 0 14px rgba(243,148,31,.7); z-index: 3; pointer-events: none; }
+#compare .cmp-handle::after { content: none; }
+#compare .cmp-knob { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; border-radius: 50%; background: #f3941f; color: #1c1329; border: 3px solid #1c1329; display: grid; place-items: center; font-weight: 800; font-size: 15px; letter-spacing: 2px; box-shadow: 0 2px 10px rgba(0,0,0,.5); }
+#compare .cmp-label { position: absolute; top: 10px; z-index: 4; padding: 3px 10px; border-radius: 999px; background: rgba(12,9,23,.75); color: #f4eefc; font-size: .8rem; pointer-events: none; }
+#compare .cmp-label.left { left: 10px; right: auto; }
+#compare .cmp-label.right { right: 10px; left: auto; }
+#compare .cmp-range { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+#compare .cmp:focus-within { outline: 2px solid #f3941f; outline-offset: 2px; }
+#compare .cmp-tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 6px; }
+#compare .cmp-tools .btn[aria-pressed="true"] { background: rgba(243,148,31,.18); }
+#compare .cmp-thumbs { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0; }
+#compare .cmp-thumbs button { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 3px; border-radius: 8px; border: 2px solid transparent; background: rgba(12,9,23,.5); color: #f4eefc; font-size: .75rem; cursor: pointer; }
+#compare .cmp-thumbs button img { width: 72px; height: 40px; object-fit: cover; border-radius: 4px; display: block; }
+#compare .cmp-thumbs button[aria-pressed="true"] { border-color: #f3941f; }
+#compare .cmp-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 12px; }
+#compare .cmp-hint { font-size: .8rem; color: var(--kk-muted-dark); }
+#compare .cmp-close { position: static; }
+@media (prefers-color-scheme: light) { #compare .cmp-thumbs button { color: #1c1329; background: #f3eefb; } }
+@media (prefers-reduced-motion: reduce) { #compare .cmp-stage { transition: none; } }
+#compare .cmp-thumbs { position: static; inset: auto; transform: none; width: auto; z-index: auto; }
+div#compare { position: static; aspect-ratio: auto; height: auto; max-height: none; overflow: visible; border: 0; background: transparent; padding: 0; margin: 8px 0; }
+div#compare:focus-within { outline: none; }
+/* dialog header on phones: title on its own line, summary under it */
+div.detail-header { flex-wrap: wrap; align-items: flex-start; gap: 4px 12px; }
+div.detail-header #detail-title { flex: 1 1 calc(100% - 60px); margin: 0; }
+div.detail-header #detail-sum { flex: 1 1 100%; order: 3; margin: 0; color: var(--kk-muted-dark); font-size: .9rem; }

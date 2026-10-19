@@ -134,13 +134,13 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     }
 
     # Parse work_dir
-    work_dir = env.get("RX_WORK_DIR", "/tmp/reencoder_work").strip()
+    work_dir = env.get("RX_WORK_DIR", "/data/work").strip()
 
     # Parse report_dir
-    report_dir = env.get("RX_REPORT_DIR", "/tmp/reencoder_reports").strip()
+    report_dir = env.get("RX_REPORT_DIR", "/data/reports").strip()
 
     # Parse frames_dir
-    frames_dir = env.get("RX_FRAMES_DIR", "/tmp/reencoder_frames").strip()
+    frames_dir = env.get("RX_FRAMES_DIR", "/data/frames").strip()
 
     # Parse max_staged_gb
     max_staged_gb = parse_float(env.get("RX_MAX_STAGED_GB", "1000"), 1000.0)
