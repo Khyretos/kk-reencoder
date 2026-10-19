@@ -42,7 +42,7 @@
   }
 
   function row(it, n) {
-    const li = h('li', 'q-row' + (it.running ? ' running' : ''));
+    const li = h('li', 'q-row' + (it.running ? ' running' : '') + (n === 1 ? ' first' : ''));
     li.dataset.key = key(it);
     li.dataset.library = it.library;
     li.dataset.folder = it.name;
@@ -51,7 +51,11 @@
     const num = h('span', 'q-num', String(n));
     const body = h('div', 'q-body');
     body.append(h('span', 'q-name', title(it.name)),
-      h('span', 'q-meta', `${it.library.toLowerCase()} · ${it.left} of ${it.files} file${it.files === 1 ? '' : 's'} left · ~${fmt(it.left_bytes)}` + (it.running ? ' · working on it now' : '')));
+      h('span', 'q-left', `${it.left} of ${it.files} file${it.files === 1 ? '' : 's'} left`),
+      h('span', 'q-size', it.running ? 'working on it now' : `~${fmt(it.left_bytes)}`));
+    const chips = h('span', 'q-chips');
+    chips.append(h('span', 'q-chip q-lib', it.library.toLowerCase()),
+      h('span', 'q-chip ' + (it.action === 'encode' ? 'q-enc' : 'q-mea'), it.action === 'encode' ? 'AV1 encode' : 'estimate'));
     const top = h('button', 'q-top', '↑');
     top.type = 'button';
     top.title = 'Send to the front';
@@ -61,12 +65,12 @@
     out.type = 'button';
     out.title = 'Take out of the queue (pauses this series)';
     out.setAttribute('aria-label', 'Take ' + title(it.name) + ' out of the queue');
-    li.append(grip, num, body, top, out);
+    li.append(grip, num, body, chips, top, out);
     return li;
   }
 
   function group(label, hint, items, gid) {
-    const wrap = h('div', 'q-group');
+    const wrap = h('div', 'q-group q-g-' + gid);
     const hd = h('h3', null, label + ' ');
     hd.append(h('span', 'q-count', String(items.length)));
     if (hint) hd.append(h('span', 'hint', ' ' + hint));
@@ -109,7 +113,7 @@
         li.dataset.library = it.library;
         li.dataset.folder = it.name;
         const body = h('div', 'q-body');
-        body.append(h('span', 'q-name', title(it.name)), h('span', 'q-meta', `${it.left} files left · ~${fmt(it.left_bytes)}`));
+        body.append(h('span', 'q-name', title(it.name)), h('span', 'q-left', `${it.left} files left`), h('span', 'q-size', `~${fmt(it.left_bytes)}`));
         const back = h('button', 'btn q-back', 'Put back');
         back.type = 'button';
         li.append(body, back);
@@ -128,9 +132,9 @@
     } catch (e) { /* the main page shows the connection state */ }
   }
 
-  function orderNow() {
-    // the server takes encode rows before measure rows; send both groups in their on-screen order
-    return [...document.querySelectorAll('#queue ol.q-list .q-row')].map(li => ({ library: li.dataset.library, folder: li.dataset.folder }));
+  function orderNow(list) {
+    // only the group that changed: reordering what gets encoded leaves the measuring order alone
+    return [...(list || document.getElementById('queue')).querySelectorAll('.q-row')].map(li => ({ library: li.dataset.library, folder: li.dataset.folder }));
   }
   async function sendOrder(order) {
     try { await post('/api/queue', { order }); } catch (e) { /* refreshed below */ }
@@ -146,7 +150,7 @@
     if (e.target.closest('.q-top')) {
       const list = li.parentElement;
       list.prepend(li);
-      sendOrder(orderNow());
+      sendOrder(orderNow(list));
     } else if (e.target.closest('.q-out')) {
       li.remove();
       await post('/api/folder', Object.assign({ paused: true }, target)).catch(() => {});
@@ -163,7 +167,7 @@
     if (!grip || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const li = grip.closest('.q-row');
     e.preventDefault();
-    dragging = { li, list: li.parentElement, start: orderNow().map(o => o.library + '/' + o.folder).join('|'), id: e.pointerId };
+    dragging = { li, list: li.parentElement, start: orderNow(li.parentElement).map(o => o.library + '/' + o.folder).join('|'), id: e.pointerId };
     li.classList.add('dragging');
     // listen on window: moving the row in the DOM drops pointer capture on the grip
     window.addEventListener('pointermove', onMove);
@@ -186,8 +190,12 @@
     const d = dragging;
     dragging = null;
     d.li.classList.remove('dragging');
-    d.list.querySelectorAll('.q-num').forEach((n, i) => { n.textContent = String(i + 1); });
-    const now = orderNow();
+    d.list.querySelectorAll('.q-row').forEach((r, i) => {
+      r.querySelector('.q-num').textContent = String(i + 1);
+      r.classList.toggle('first', i === 0);
+      r.querySelector('.q-top').disabled = i === 0;
+    });
+    const now = orderNow(d.list);
     if (now.map(o => o.library + '/' + o.folder).join('|') !== d.start) sendOrder(now);
   }
 

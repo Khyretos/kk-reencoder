@@ -612,6 +612,10 @@
         // "Encode queued" only while the marked series still has files to do; a finished series just shows Done
         // (the mark stays, so episodes added later are encoded too)
         const workLeft = (folder.pending || 0) + (folder.running || 0) > 0;
+        // the coloured edge of the card or row says the state at a glance
+        div.classList.add('st-' + stateClass);
+        if ((folder.running || 0) > 0) div.classList.add('st-running');
+        else if (state.mode === 'manual' && folder.encode && workLeft) div.classList.add('st-queued');
         if (state.mode === 'manual' && folder.encode && workLeft) {
             const queuedChip = document.createElement('span');
             queuedChip.className = 'status-chip queued';
