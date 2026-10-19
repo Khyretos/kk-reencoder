@@ -1284,13 +1284,21 @@ ul.q-list .q-row { grid-template-columns: minmax(0, 1fr) auto; }
   .q-name, .q-meta { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
   .q-row { gap: 8px; padding: 8px; }
 }
-/* queue panel folds from its header */
-#queue .q-head { margin: 0; }
-.q-toggle { all: unset; box-sizing: border-box; display: flex; align-items: baseline; gap: 10px; width: 100%; cursor: pointer; font: inherit; color: inherit; padding: 2px 0; }
-.q-toggle:focus-visible { outline: 2px solid #f3941f; outline-offset: 4px; border-radius: 6px; }
-.q-chev { display: inline-block; color: #f3941f; transition: transform .15s ease; }
-#queue:not(.q-closed) .q-chev { transform: rotate(90deg); }
-.q-sum { font-size: .8rem; font-weight: 400; color: var(--kk-muted-dark); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.q-hint { margin: 6px 0 0; }
-#queue.q-closed .q-groups, #queue.q-closed .q-hint { display: none; }
-@media (prefers-color-scheme: light) { .q-sum { color: var(--kk-muted-light); } .q-chev { color: #8a5a00; } .q-toggle:focus-visible { outline-color: #8a5a00; } }
+/* every card folds from its heading (fold.js); folded it shows a line of numbers */
+.card > h2:has(> .fold-toggle) { margin-bottom: 0; }
+.card:not(.folded) > h2:has(> .fold-toggle) { margin-bottom: 12px; }
+.fold-toggle { all: unset; box-sizing: border-box; display: flex; align-items: baseline; gap: 10px; width: 100%; cursor: pointer; font: inherit; color: inherit; padding: 2px 0; }
+.fold-toggle:focus-visible { outline: 2px solid #f3941f; outline-offset: 4px; border-radius: 6px; }
+.fold-chev { display: inline-block; color: #f3941f; transition: transform .15s ease; flex: none; }
+.card:not(.folded) .fold-chev { transform: rotate(90deg); }
+.fold-label { flex: none; }
+.fold-sum { font-size: .8rem; font-weight: 400; color: var(--kk-muted-dark); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card:not(.folded) .fold-sum { display: none; }
+.card.folded > :not(h2) { display: none !important; }
+.q-hint { margin: 0 0 8px; }
+.ov-grid > .card.folded { align-self: start; }
+@media (max-width: 640px) { .fold-sum { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } .fold-toggle { flex-wrap: wrap; row-gap: 2px; } .fold-sum { flex-basis: 100%; padding-left: 22px; } }
+@media (prefers-color-scheme: light) { .fold-sum { color: var(--kk-muted-light); } .fold-chev { color: #8a5a00; } .fold-toggle:focus-visible { outline-color: #8a5a00; } }
+/* overview cards are narrow: a folded card puts its numbers on their own lines under the heading */
+.ov-grid .fold-toggle { flex-wrap: wrap; row-gap: 4px; }
+.ov-grid .fold-sum { flex-basis: 100%; padding-left: 22px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }

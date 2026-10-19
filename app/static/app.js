@@ -221,6 +221,7 @@
         if (libs) {
             state.librariesCache = libs;
             KKChart.render(els.libchart, libs);
+            setSum('chart', libs.map(l => `${l.library} ${formatBytes(l.original_bytes)} → ${formatBytes(l.projected_bytes)}`).join(' · '));
         }
 
         renderFolders();
@@ -269,6 +270,12 @@
         });
     }
 
+    // the one-line numbers a folded panel shows in its heading (fold.js)
+    function setSum(id, text) {
+        const sec = document.getElementById(id);
+        if (sec && sec.dataset.sum !== text) sec.dataset.sum = text;
+    }
+
     function updateSpace(data) {
         const maxGB = data.max_staged_gb || 1; // Avoid div by zero
         const usedGB = (data.staged_bytes || 0) / (1024 * 1024 * 1024);
@@ -276,6 +283,7 @@
         
         els.spaceFill.style.width = (pct * 100) + '%';
         els.spaceText.textContent = `${formatBytes(data.staged_bytes)} of ${formatBytes(maxGB * 1024 * 1024 * 1024)} used by copies waiting for confirm or kept originals`;
+        setSum('space', `${formatBytes(data.staged_bytes)} of ${formatBytes(maxGB * 1024 * 1024 * 1024)} (${Math.round(pct * 100)}%)`);
     }
 
     function updateSysLine(sys) {
@@ -296,6 +304,9 @@
 
     function updateJobList(jobs) {
         els.jobList.innerHTML = '';
+        setSum('jobs', jobs.length
+            ? jobs.map(j => `${Math.round(j.percent || 0)}% ${String(j.folder).split('/').pop()}`).join(' · ')
+            : 'Idle');
 
         if (jobs.length === 0) {
             const idle = document.createElement('div');

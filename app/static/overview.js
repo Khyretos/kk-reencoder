@@ -71,6 +71,8 @@
     function setAria(id, text) {
         const el = document.querySelector('#' + id + ' .chartbox');
         if (el) { el.setAttribute('role', 'img'); el.setAttribute('aria-label', text); }
+        const sec = document.getElementById(id);  // the same numbers are the folded panel's line (fold.js)
+        if (sec && sec.dataset.sum !== text) sec.dataset.sum = text;
     }
 
     // ---- hero ----
@@ -210,7 +212,8 @@
                 { name: 'After', type: 'pie', radius: ['52%', '75%'], center: ['50%', '45%'], label: { show: false }, itemStyle: { borderColor: C.track, borderWidth: 2 }, data: ring(cd.after || {}) },
             ],
         }), true);
-        setAria('ch-codecs', 'Inner ring codecs before, outer ring after');
+        const share = (obj, k) => { const all = Object.values(obj || {}).reduce((a, b) => a + b, 0); return all ? Math.round((obj[k] || 0) / all * 100) : 0; };
+        setAria('ch-codecs', `AV1 ${share(cd.before, 'av1')}% before, ${share(cd.after, 'av1')}% after (inner ring before, outer ring after)`);
     }
 
     function live(sys) {
@@ -246,6 +249,9 @@
         const box = document.getElementById('now-list');
         if (!box) return;
         box.textContent = '';
+        const now = document.getElementById('now');
+        const sum = list && list.length ? list.map(j => `${Math.round(j.percent || 0)}% ${String(j.folder).split('/').pop()}`).join(' · ') : 'Idle';
+        if (now && now.dataset.sum !== sum) now.dataset.sum = sum;
         if (!list || !list.length) {
             const idle = document.createElement('div');
             idle.className = 'idle';
