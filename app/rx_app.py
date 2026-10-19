@@ -167,6 +167,33 @@ class App:
                 return f
         raise KeyError(f"{library}/{folder}")
 
+    def queue(self, limit: int = 200) -> Dict[str, Any]:
+        """The series in the order the worker takes them (only those with files left), plus paused ones."""
+        folders = rx_db.folders(self.conn)
+        order = rx_model.order_folders(folders)
+        running = {(j["library"], j["folder"]) for j in (self.worker.jobs_list() if self.worker else [])}
+        mode = self.cfg.get("mode")
+
+        def item(f):
+            if mode == "stage" or (mode == "manual" and f.get("encode")):
+                action = "encode"
+            else:
+                action = "measure"
+            left = (f.get("pending") or 0) + (f.get("running") or 0)
+            return {"library": f["library"], "name": f["name"], "action": action, "priority": f.get("priority", 0),
+                    "files": f["files"], "left": left, "left_bytes": int(f["original_bytes"] * left / f["files"]) if f["files"] else 0,
+                    "running": (f["library"], f["name"]) in running}
+
+        paused = [item(f) for f in folders if f.get("paused") and (f.get("pending") or 0) > 0]
+        return {"items": [item(f) for f in order[:limit]], "total": len(order), "paused": paused}
+
+    def reorder(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Put these series first, in this order (highest priority first); others keep their place after them."""
+        base = len(items)
+        for i, it in enumerate(items):
+            rx_db.set_folder(self.conn, it["library"], it["folder"], priority=1000 + base - i)
+        return {"ok": True}
+
     def encode_many(self, items: List[Dict[str, Any]], encode: bool) -> Dict[str, Any]:
         """Mark (or unmark) several series for re-encoding at once."""
         n = 0

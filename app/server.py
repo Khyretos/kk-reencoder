@@ -148,6 +148,10 @@ def make_server(app, host, port):
                 return
 
             # API Routes
+            if path == "/api/queue":
+                self._send_json(200, app.queue())
+                return
+
             if path == "/api/settings":
                 self._send_json(200, app.settings())
                 return
@@ -341,6 +345,14 @@ def make_server(app, host, port):
                     self._send_json(404, {"error": "Not Found"})
                 except Exception as e:
                     self._send_json(500, {"error": str(e)})
+                return
+
+            if path == "/api/queue":
+                order = data.get("order") if isinstance(data, dict) else None
+                if not isinstance(order, list) or not all(isinstance(x, dict) and "library" in x and "folder" in x for x in order):
+                    self._send_json(400, {"error": "order must be a list of {library, folder}"})
+                    return
+                self._send_json(200, app.reorder(order))
                 return
 
             if path == "/api/settings":

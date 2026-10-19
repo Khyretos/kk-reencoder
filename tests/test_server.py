@@ -221,6 +221,15 @@ class Api(unittest.TestCase):
         s = json.loads(self.get("/api/status")[2])
         self.assertIn("last_scan", s)
 
+    def test_queue_api(self):
+        q = json.loads(self.get("/api/queue")[2])
+        self.assertIn("items", q)
+        self.assertTrue(self.post("/api/queue", {"order": [{"library": "Anime", "folder": "Show"}]})["ok"])
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            self.post("/api/queue", {"order": "nope"})
+        self.assertEqual(e.exception.code, 400)
+        self.post("/api/folder", {"library": "Anime", "folder": "Show", "priority": 0})
+
     def test_unknown_is_404(self):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.get("/nope")

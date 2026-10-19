@@ -71,6 +71,28 @@ class App(unittest.TestCase):
         self.assertEqual(t["estimated_bytes"], 400 + 400 + 1000)
         self.assertEqual(t["estimated_saved_bytes"], 3000 - 1800)
 
+    def test_queue_and_reorder(self):
+        for i, name in enumerate(["Alpha", "Beta", "Gamma"]):
+            add(self.conn, f"/m/Anime/{name}/1.mkv", name, "pending")
+        q = self.app.queue()
+        names = [x["name"] for x in q["items"]]
+        self.assertEqual(names, ["Alpha", "Beta", "Gamma", "Show"])  # alphabetical, only series with work left
+        self.assertEqual(q["items"][0]["action"], "measure")  # report mode: measure only
+        self.assertEqual(q["total"], 4)
+        self.app.reorder([{"library": "Anime", "folder": "Gamma"}, {"library": "Anime", "folder": "Alpha"}])
+        self.assertEqual([x["name"] for x in self.app.queue()["items"]], ["Gamma", "Alpha", "Beta", "Show"])
+        # taking a series out of the queue pauses it; it shows under paused and comes back on resume
+        self.app.set_folder("Anime", "Beta", paused=True)
+        q = self.app.queue()
+        self.assertNotIn("Beta", [x["name"] for x in q["items"]])
+        self.assertEqual([x["name"] for x in q["paused"]], ["Beta"])
+        self.app.cfg["mode"] = "manual"
+        self.app.set_folder("Anime", "Show", encode=True)
+        q = self.app.queue()
+        self.assertEqual(q["items"][0]["name"], "Show")  # ticked series are encoded first
+        self.assertEqual(q["items"][0]["action"], "encode")
+        self.assertEqual(q["items"][1]["action"], "measure")
+
     def test_overview(self):
         o = self.app.overview()
         self.assertEqual(o["codecs"]["before"], {"h264": 2000, "av1": 1000})
