@@ -514,8 +514,10 @@
         setStatusText(statusText, stateClass, folder);
         statusRow.append(statusChip, statusText);
 
-        // Status chip for queued in manual mode
-        if (state.mode === 'manual' && folder.encode) {
+        // "Encode queued" only while the marked series still has files to do; a finished series just shows Done
+        // (the mark stays, so episodes added later are encoded too)
+        const workLeft = (folder.pending || 0) + (folder.running || 0) > 0;
+        if (state.mode === 'manual' && folder.encode && workLeft) {
             const queuedChip = document.createElement('span');
             queuedChip.className = 'status-chip queued';
             queuedChip.textContent = 'Encode queued';
@@ -554,7 +556,7 @@
         body.append(statusRow, statsRow, bar, count);
 
         // Click to open detail
-        div.classList.toggle('marked', !!folder.encode);
+        div.classList.toggle('marked', !!folder.encode && (folder.pending || 0) + (folder.running || 0) > 0);
         div.addEventListener('click', (e) => {
             if (e.target.closest('button, input, label')) return;  // card buttons and checkboxes do their own thing
             if (e.target.closest('.folder')) {
