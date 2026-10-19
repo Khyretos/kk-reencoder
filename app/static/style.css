@@ -1364,3 +1364,14 @@ span.status-chip.queued { background: #f15bb5; color: #1c1329; }
   span.status-chip.queued { background: #7b2fb5; color: #ffffff; }
   div.folder.st-running { box-shadow: 0 0 0 1px #8a5a00; }
 }
+
+/* queue groups fold from their heading (queue.js) */
+#queue h3 { display: block; }
+.q-gtoggle { align-items: center; flex-wrap: wrap; row-gap: 2px; }
+.q-group:not(.q-folded) .fold-chev { transform: rotate(90deg); }
+.q-group.q-folded .fold-chev { transform: none; }
+.q-group:not(.q-folded) .q-gsum { display: none; }
+.q-group.q-folded > :not(h3) { display: none !important; }
+.q-gsum { flex: 1 1 100%; padding-left: 22px; }
+.q-group.q-folded .q-gsum { display: inline; }
+@media (max-width: 640px) { .q-gtoggle .hint { flex-basis: 100%; padding-left: 22px; } }

@@ -69,11 +69,25 @@
     return li;
   }
 
+  function groupOpen(gid) {
+    try { return localStorage.getItem('rx-qgroup:' + gid) !== '0'; } catch (e) { return true; }
+  }
+
   function group(label, hint, items, gid) {
-    const wrap = h('div', 'q-group q-g-' + gid);
-    const hd = h('h3', null, label + ' ');
-    hd.append(h('span', 'q-count', String(items.length)));
-    if (hint) hd.append(h('span', 'hint', ' ' + hint));
+    // each group folds from its heading too; folded it says which series is next
+    const open = groupOpen(gid);
+    const wrap = h('div', 'q-group q-g-' + gid + (open ? '' : ' q-folded'));
+    const hd = h('h3');
+    const tog = h('button', 'fold-toggle q-gtoggle');
+    tog.type = 'button';
+    tog.dataset.group = gid;
+    tog.setAttribute('aria-expanded', String(open));
+    const chev = h('span', 'fold-chev', '▸');
+    chev.setAttribute('aria-hidden', 'true');
+    tog.append(chev, h('span', 'fold-label', label), h('span', 'q-count', String(items.length)));
+    if (hint) tog.append(h('span', 'hint', hint));
+    if (items[0]) tog.append(h('span', 'fold-sum q-gsum', 'next: ' + title(items[0].name)));
+    hd.append(tog);
     const ol = h('ol', 'q-list');
     ol.dataset.group = gid;
     const shown = expanded[gid] ? items : items.slice(0, SHOW);
@@ -142,6 +156,15 @@
   }
 
   async function onClick(e) {
+    const gtog = e.target.closest('.q-gtoggle');
+    if (gtog) {
+      const wrap = gtog.closest('.q-group');
+      const open = wrap.classList.contains('q-folded');
+      wrap.classList.toggle('q-folded', !open);
+      gtog.setAttribute('aria-expanded', String(open));
+      try { localStorage.setItem('rx-qgroup:' + gtog.dataset.group, open ? '1' : '0'); } catch (err) { /* not remembered */ }
+      return;
+    }
     const more = e.target.closest('[data-more]');
     if (more) { expanded[more.dataset.more] = !expanded[more.dataset.more]; paint(); return; }
     const li = e.target.closest('.q-row');
