@@ -120,6 +120,7 @@
         // Search & Filter
         els.q.addEventListener('input', debounce(renderFolders, 300));
         els.filter.addEventListener('change', renderFolders);
+        buildSortControls();
 
         // Detail dialog: detail.js opens it and wires the close button and the download link;
         // here only a tap on the dark backdrop closes it (Escape / phone back close a modal dialog natively)
@@ -354,6 +355,68 @@
 
     // --- Folder Rendering Logic ---
 
+    // Sort order of the series list: the select in the toolbar and the list view's column headings
+    const SORTS = {
+        name: ['Name A–Z', (a, b) => byName(a, b)],
+        size: ['Biggest first', (a, b) => (b.original_bytes - a.original_bytes) || byName(a, b)],
+        saving: ['Biggest saving', (a, b) => (savedOf(b) - savedOf(a)) || byName(a, b)],
+        left: ['Most left to do', (a, b) => (leftBytes(b) - leftBytes(a)) || byName(a, b)],
+    };
+    function byName(a, b) {
+        return displayName(a).localeCompare(displayName(b), undefined, { sensitivity: 'base' });
+    }
+    function savedOf(f) {
+        return (f.original_bytes || 0) - (f.projected_bytes || 0);
+    }
+    function leftBytes(f) {
+        return f.files ? (f.original_bytes || 0) * ((f.pending || 0) + (f.running || 0)) / f.files : 0;
+    }
+    function compareFolders(ka, kb) {
+        const sort = SORTS[state.sortBy] || SORTS.name;
+        return sort[1](state.foldersCache[ka], state.foldersCache[kb]);
+    }
+    function setSort(key) {
+        state.sortBy = SORTS[key] ? key : 'name';
+        if (els.sort) els.sort.value = state.sortBy;
+        document.querySelectorAll('#list-head [data-sort]').forEach(h =>
+            h.setAttribute('aria-sort', h.dataset.sort === state.sortBy ? 'descending' : 'none'));
+        try { localStorage.setItem('kk-reencoder-sort', state.sortBy); } catch (e) { /* private window */ }
+        renderFolders();
+    }
+    function buildSortControls() {
+        // a Sort select after the status filter, and the column headings of the list view
+        const sel = document.createElement('select');
+        sel.id = 'sort';
+        sel.setAttribute('aria-label', 'Sort series');
+        Object.entries(SORTS).forEach(([k, [label]]) => {
+            const o = document.createElement('option');
+            o.value = k;
+            o.textContent = label;
+            sel.appendChild(o);
+        });
+        sel.addEventListener('change', () => setSort(sel.value));
+        els.filter.after(sel);
+        els.sort = sel;
+        const head = document.createElement('div');
+        head.id = 'list-head';
+        head.setAttribute('role', 'row');
+        [['Name', 'name'], ['Status', null], ['Saved', 'saving'], ['Size before → after', 'size'], ['Progress', 'left']].forEach(([t, k]) => {
+            const c = document.createElement(k ? 'button' : 'span');
+            c.textContent = t;
+            if (k) {
+                c.type = 'button';
+                c.dataset.sort = k;
+                c.addEventListener('click', () => setSort(k));
+            }
+            head.appendChild(c);
+        });
+        els.folders.before(head);
+        let saved = 'name';
+        try { saved = localStorage.getItem('kk-reencoder-sort') || 'name'; } catch (e) { /* private window */ }
+        state.sortBy = SORTS[saved] ? saved : 'name';
+        sel.value = state.sortBy;
+    }
+
     // "Animated/Frozen II (2019)" in library Movies -> title "Frozen II (2019)", tags animated + movie
     const LIBRARY_TAG = { anime: 'anime', series: 'series', movies: 'movie', cartoons: 'cartoon' };
     const SKIP_TAG = new Set(['regular', 'other', 'misc']);
@@ -397,7 +460,7 @@
         const filteredKeys = keys.filter(k => {
             const f = state.foldersCache[k];
             return displayName(f).toLowerCase().includes(query) || folderTags(f).some(t => t.includes(query));
-        }).sort((a, b) => displayName(state.foldersCache[a]).localeCompare(displayName(state.foldersCache[b]), undefined, { sensitivity: 'base' }));
+        }).sort(compareFolders);
 
         // Filter by state
         const finalKeys = filteredKeys.filter(k => {
