@@ -23,7 +23,8 @@ class Config(unittest.TestCase):
         self.assertEqual(c["max_ratio"], 0.8)
         self.assertEqual(c["samples"], 3)
         self.assertEqual(c["parallel"], 2)
-        self.assertEqual(c["filters"], {"Anime": "deband", "Cartoons": "deband"})
+        self.assertEqual(c["filters"], {})
+        self.assertEqual(server.config_from_env({"RX_ROOTS": "/a", "RX_FILTERS": "Anime=deband, Movies=none"})["filters"], {"Anime": "deband"})
         self.assertEqual(c["min_kbps"]["1080"], 2500)
         self.assertTrue(c["skip_hdr"])
         # everything the service keeps lives in the /data volume, never in the container's /tmp

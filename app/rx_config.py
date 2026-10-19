@@ -103,17 +103,15 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     # Parse parallel (clamped 1..5)
     parallel = parse_int(env.get("RX_PARALLEL", "2"), 2, 1, 5)
 
-    # Parse filters (like 'Anime=deband,Cartoons=deband')
-    filters_raw = env.get("RX_FILTERS", "Anime=deband,Cartoons=deband")
+    # Optional CPU filters per library, like 'Anime=deband'. Default none: the deband filter only runs on
+    # the CPU and made anime ~5x slower than the full-GPU path (Kees chose speed, 2026-10-19).
+    filters_raw = env.get("RX_FILTERS", "")
     filters: Dict[str, str] = {}
-    if filters_raw and filters_raw.lower() != "none":
-        for item in filters_raw.split(","):
-            if "=" in item:
-                lib, filter_name = item.split("=", 1)
-                filters[lib.strip()] = filter_name.strip()
-    else:
-        # Default filters
-        filters = {"Anime": "deband", "Cartoons": "deband"}
+    for item in filters_raw.split(","):
+        if "=" in item:
+            lib, filter_name = (x.strip() for x in item.split("=", 1))
+            if filter_name and filter_name.lower() != "none":
+                filters[lib] = filter_name
 
     # Parse codecs
     codecs = parse_list(env.get("RX_CODECS", "h264,hevc,mpeg4,vc1,mpeg2video,wmv3,msmpeg4v3"),

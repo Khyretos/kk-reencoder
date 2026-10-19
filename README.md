@@ -48,7 +48,7 @@ Every folder gets `encoding_report.json`. This file is stored in the data volume
 - **nvenc:** NVIDIA.
 - **svt:** CPU only (slow).
 
-Optional deband filter per library via `RX_FILTERS` (default: Anime and Cartoons). VMAF is then measured against the debanded picture.
+Optional deband filter per library via `RX_FILTERS` (default: none). It runs on the CPU and is about 5x slower than the full-GPU path (decode, 10-bit conversion and AV1 encode on the GPU); VMAF is then measured against the debanded picture.
 
 ## Settings
 
@@ -61,7 +61,7 @@ Optional deband filter per library via `RX_FILTERS` (default: Anime and Cartoons
 | `RX_TARGET_VMAF` | `95` | Target VMAF score. |
 | `RX_MAX_RATIO` | `0.8` | Max output size ratio (0.8 = 80%). |
 | `RX_PARALLEL` | `2` | Number of concurrent encodes (1-5). |
-| `RX_FILTERS` | `Anime=deband,Cartoons=deband` | Debanding rules per library. |
+| `RX_FILTERS` | (none) | Optional CPU filters per library, e.g. `Anime=deband`. |
 | `RX_MAX_STAGED_GB` | `1000` | Pause staging if total exceeds this. |
 | `RX_VMAF_THREADS` | `4` | Threads for VMAF analysis. |
 | `RX_SAMPLES` | `3` | Number of samples per file. |
