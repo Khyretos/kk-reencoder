@@ -1135,3 +1135,6 @@ header.top { position: static; }
 .job-head, .folder-header, .stats-row, .status-row { min-width: 0; flex-wrap: wrap; }
 .toolbar { flex-wrap: wrap; }
 .toolbar input#q { min-width: 0; flex: 1 1 10em; }
+/* ~900 cards: let the browser skip layout and paint of cards that are off screen */
+.folder { content-visibility: auto; contain-intrinsic-size: auto 210px; }
+#folders.list .folder { contain-intrinsic-size: auto 90px; }

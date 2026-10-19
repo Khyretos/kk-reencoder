@@ -397,7 +397,7 @@
         const filterVal = els.filter.value;
         const isGrid = els.isGrid;
 
-        els.folders.innerHTML = '';
+        els.isGrid = state.viewMode === 'grid';
 
         // Get all unique keys from cache
         const keys = Object.keys(state.foldersCache);
@@ -415,14 +415,22 @@
             return getFolderStateClass(f) === filterVal;
         });
 
-        finalKeys.forEach(key => {
+        // Reuse a card while nothing it shows has changed: rebuilding ~900 cards every poll froze phones
+        // for about 2 s and swallowed taps.
+        const cache = state.cardCache || (state.cardCache = new Map());
+        const wanted = finalKeys.map(key => {
             const f = state.foldersCache[key];
-            const el = createFolderElement(f, key);
-            els.folders.appendChild(el);
+            const sig = JSON.stringify(f) + '|' + state.mode + '|' + state.selectedFolders.has(key);
+            let hit = cache.get(key);
+            if (!hit || hit.sig !== sig) {
+                hit = { sig, el: createFolderElement(f, key) };
+                cache.set(key, hit);
+            }
+            return hit.el;
         });
-
-        // Update global isGrid flag for event listeners
-        els.isGrid = state.viewMode === 'grid';
+        const now = els.folders.children;
+        const same = now.length === wanted.length && wanted.every((el, i) => now[i] === el);
+        if (!same) els.folders.replaceChildren(...wanted);
     }
 
     function createFolderElement(folder, key) {
@@ -499,7 +507,7 @@
 
         // Body
         const body = document.createElement('div');
-        body.className = els.isGrid ? 'folder-grid' : 'folder-list';
+        body.className = 'folder-grid';  // grid or list is decided by the class on #folders
 
         // Status chip and text
         const statusRow = document.createElement('div');
