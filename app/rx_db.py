@@ -112,6 +112,8 @@ def connect(path: str) -> "LockedConnection":
         )
     """)
     conn.commit()
+    conn.execute("CREATE INDEX IF NOT EXISTS files_by_folder ON files (library, folder)")
+    conn.execute("CREATE INDEX IF NOT EXISTS files_by_status ON files (status)")
     # databases from before the encode flag get the column
     if "encode" not in [r["name"] for r in conn.execute("PRAGMA table_info(folders)").fetchall()]:
         conn.execute("ALTER TABLE folders ADD COLUMN encode INTEGER DEFAULT 0")
@@ -304,104 +306,35 @@ def set_folder(conn: sqlite3.Connection, library: str, name: str, priority: Opti
     conn.commit()
 
 
-def folders(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
-    """
-    Get summary statistics for all folders that have files.
-
-    Returns:
-        A list of dictionaries sorted by name (case-insensitive) then library.
-    """
-    # Get all unique (library, folder) pairs that have files
-    cursor = conn.execute("""
-        SELECT DISTINCT library, folder FROM files
-    """)
-    rows = cursor.fetchall()
-    
-    result = []
+def folders(conn) -> List[Dict[str, Any]]:
+    """One summary per (library, folder) that has files, in ONE grouped query (the page asks every few
+    seconds and the library has thousands of files), sorted by name case-insensitive, then library."""
+    rows = conn.execute("""
+        SELECT f.library AS library, f.folder AS name,
+               COALESCE(d.priority, 0) AS priority, COALESCE(d.paused, 0) AS paused, COALESCE(d.encode, 0) AS encode,
+               COUNT(*) AS files,
+               SUM(f.status = 'pending') AS pending, SUM(f.status = 'running') AS running,
+               SUM(f.status = 'encoded') AS encoded, SUM(f.status = 'predicted') AS predicted,
+               SUM(f.status = 'skipped') AS skipped, SUM(f.status = 'failed') AS failed,
+               SUM(f.status = 'staged') AS staged, SUM(f.status = 'confirmed') AS confirmed,
+               COALESCE(SUM(f.size), 0) AS original_bytes,
+               COALESCE(SUM(CASE WHEN f.status IN ('encoded', 'confirmed') AND f.new_bytes IS NOT NULL
+                                 THEN f.new_bytes ELSE f.size END), 0) AS current_bytes,
+               COALESCE(SUM(CASE WHEN f.status IN ('encoded', 'confirmed', 'staged', 'predicted') AND f.new_bytes IS NOT NULL
+                                 THEN f.new_bytes ELSE f.size END), 0) AS projected_bytes,
+               COALESCE(SUM(CASE WHEN f.status = 'staged' THEN COALESCE(f.new_bytes, 0)
+                                 WHEN f.status = 'confirmed' THEN f.size ELSE 0 END), 0) AS extra_bytes
+        FROM files f LEFT JOIN folders d ON d.library = f.library AND d.name = f.folder
+        GROUP BY f.library, f.folder
+    """).fetchall()
+    out = []
     for r in rows:
-        lib = r["library"]
-        fld = r["folder"]
-        
-        # Get counts by status
-        cursor = conn.execute("""
-            SELECT status, COUNT(*) as cnt 
-            FROM files 
-            WHERE library = ? AND folder = ?
-            GROUP BY status
-        """, (lib, fld))
-        
-        counts = {}
-        for c in cursor:
-            counts[c["status"]] = c["cnt"]
-        
-        pending = counts.get("pending", 0)
-        encoded = counts.get("encoded", 0)
-        predicted = counts.get("predicted", 0)
-        skipped = counts.get("skipped", 0)
-        failed = counts.get("failed", 0)
-        staged = counts.get("staged", 0)
-        confirmed = counts.get("confirmed", 0)
-        extra_bytes = conn.execute("""
-            SELECT COALESCE(SUM(CASE WHEN status = 'staged' THEN COALESCE(new_bytes, 0)
-                                     WHEN status = 'confirmed' THEN size ELSE 0 END), 0) AS extra
-            FROM files WHERE library = ? AND folder = ?
-        """, (lib, fld)).fetchone()["extra"]
-        
-        # Sum sizes
-        cursor = conn.execute("""
-            SELECT SUM(size) as total_size 
-            FROM files 
-            WHERE library = ? AND folder = ?
-        """, (lib, fld))
-        total_size = cursor.fetchone()["total_size"] or 0
-        
-        # Current bytes: sum of new_bytes for encoded rows, size otherwise
-        cursor = conn.execute("""
-            SELECT COALESCE(SUM(CASE WHEN status IN ('encoded', 'confirmed') AND new_bytes IS NOT NULL THEN new_bytes ELSE size END), 0) as current
-            FROM files 
-            WHERE library = ? AND folder = ?
-        """, (lib, fld))
-        current_bytes = cursor.fetchone()["current"] or 0
-        
-        # Projected bytes: like current, and predicted rows with new_bytes also at new_bytes
-        # Logic: 
-        # - encoded rows: use new_bytes
-        # - predicted rows: use new_bytes (as per spec: "predicted rows with new_bytes also at new_bytes")
-        # - other rows (pending, skipped, failed): use size
-        cursor = conn.execute("""
-            SELECT COALESCE(SUM(CASE 
-                WHEN status IN ('encoded', 'confirmed', 'staged', 'predicted') AND new_bytes IS NOT NULL THEN new_bytes 
-                ELSE size 
-            END), 0) as projected
-            FROM files 
-            WHERE library = ? AND folder = ?
-        """, (lib, fld))
-        projected_bytes = cursor.fetchone()["projected"] or 0
-        
-        result.append({
-            "library": lib,
-            "name": fld,
-            "priority": conn.execute("SELECT priority FROM folders WHERE library = ? AND name = ?", (lib, fld)).fetchone()["priority"],
-            "paused": bool(conn.execute("SELECT paused FROM folders WHERE library = ? AND name = ?", (lib, fld)).fetchone()["paused"]),
-            "encode": folder_encode(conn, lib, fld),
-            "encode": bool(conn.execute("SELECT encode FROM folders WHERE library = ? AND name = ?", (lib, fld)).fetchone()["encode"]),
-            "files": sum(counts.values()),
-            "pending": pending,
-            "encoded": encoded,
-            "predicted": predicted,
-            "skipped": skipped,
-            "failed": failed,
-            "staged": staged,
-            "confirmed": confirmed,
-            "extra_bytes": extra_bytes,
-            "original_bytes": total_size,
-            "current_bytes": current_bytes,
-            "projected_bytes": projected_bytes
-        })
-    
-    # Sort by name case-insensitive, then library
-    result.sort(key=lambda x: (x["name"].lower(), x["library"]))
-    return result
+        d = dict(r)
+        d["paused"] = bool(d["paused"])
+        d["encode"] = bool(d["encode"])
+        out.append(d)
+    out.sort(key=lambda x: (x["name"].lower(), x["library"]))
+    return out
 
 
 def next_file(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
