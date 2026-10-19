@@ -103,6 +103,30 @@ class Db(unittest.TestCase):
         self.assertEqual(files[0]["original_bytes"], 1000)
         self.assertEqual(files[0]["codec_before"], "h264")
 
+    def test_encode_flag(self):
+        self.assertFalse({x["name"]: x for x in db.folders(self.c)}["Zeta"]["encode"])
+        db.set_result(self.c, "/m/A/Zeta/1.mkv", status="predicted", new_bytes=300, quality=22, vmaf=95.2)
+        n = db.set_folder(self.c, "Anime", "Zeta", encode=True)
+        z = {x["name"]: x for x in db.folders(self.c)}["Zeta"]
+        self.assertTrue(z["encode"])
+        # an estimate is not an encode: marking the series sends its estimated files back to the queue
+        self.assertEqual(db.get_file(self.c, "/m/A/Zeta/1.mkv")["status"], "pending")
+        self.assertEqual(db.get_file(self.c, "/m/A/Zeta/1.mkv")["quality"], 22)  # kept: speeds up the next run
+        self.assertEqual(db.next_file(self.c)["path"], "/m/A/Zeta/1.mkv")  # marked series first
+        db.set_folder(self.c, "Anime", "Zeta", encode=False)
+        self.assertFalse({x["name"]: x for x in db.folders(self.c)}["Zeta"]["encode"])
+        self.assertTrue(db.folder_encode(self.c, "Anime", "alpha") is False)
+
+    def test_encode_column_added_to_old_db(self):
+        import sqlite3, tempfile, os
+        path = os.path.join(tempfile.mkdtemp(), "old.db")
+        old = sqlite3.connect(path)
+        old.execute("CREATE TABLE folders (library TEXT, name TEXT, priority INTEGER DEFAULT 0, paused INTEGER DEFAULT 0, PRIMARY KEY (library, name))")
+        old.commit(); old.close()
+        c = db.connect(path)
+        db.set_folder(c, "A", "x", encode=True)
+        self.assertTrue(db.folder_encode(c, "A", "x"))
+
     def test_state(self):
         self.assertEqual(db.get_state(self.c, "paused", "0"), "0")
         db.set_state(self.c, "paused", "1")

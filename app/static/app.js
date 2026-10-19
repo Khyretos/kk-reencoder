@@ -15,7 +15,8 @@
         foldersCache: {}, // key: "library/name", value: object from /api/folders
         librariesCache: [], // array from /api/libraries
         connState: 'Live',
-        viewMode: 'grid' // 'grid' | 'list'
+        viewMode: 'grid', // 'grid' | 'list'
+        selectedFolders: new Set() // keys: "library/name"
     };
 
     // DOM Elements
@@ -25,12 +26,7 @@
         parallelInput: document.getElementById('parallel'),
         conn: document.getElementById('conn'),
         notice: document.getElementById('notice'),
-        tiles: [
-            { label: 'Library size', val: null, sub: null },
-            { label: 'Size now', val: null, sub: null },
-            { label: 'Saved so far', val: null, sub: null },
-            { label: 'Projected when done', val: null, sub: null }
-        ],
+        tiles: document.querySelectorAll('#tiles .tile'),
         spaceFill: document.getElementById('space-fill'),
         spaceText: document.getElementById('space-text'),
         libchart: document.getElementById('libchart'),
@@ -48,6 +44,8 @@
         detailClose: document.getElementById('detail-close'),
         detailJson: document.getElementById('detail-json'),
         detail: document.getElementById('detail'),
+        encodeSelectedBtn: null,
+        clearSelectedBtn: null,
         isGrid: state.viewMode === 'grid'
     };
 
@@ -71,6 +69,11 @@
         detailJson: els.detailJson || null,
         detail: els.detail || null
     };
+
+    // Ensure tiles array has valid references
+    if (!els.tiles.length) {
+        els.tiles = [];
+    }
 
     // --- Initialization ---
 
@@ -130,6 +133,26 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && !els.detail.hidden) closeDetail();
         });
+
+        // Encode Selected Buttons (created once, after #filter)
+        if (!els.encodeSelectedBtn && els.filter) {
+            const enc = document.createElement('button');
+            enc.id = 'encode-selected';
+            enc.className = 'btn btn-primary';
+            enc.disabled = true;
+            enc.hidden = true;
+            enc.textContent = 'Encode selected';
+            const clr = document.createElement('button');
+            clr.id = 'clear-selected';
+            clr.className = 'btn';
+            clr.hidden = true;
+            clr.textContent = 'Clear';
+            els.filter.after(enc, clr);
+            els.encodeSelectedBtn = enc;
+            els.clearSelectedBtn = clr;
+        }
+        if (els.encodeSelectedBtn) els.encodeSelectedBtn.addEventListener('click', () => encodeSelected());
+        if (els.clearSelectedBtn) els.clearSelectedBtn.addEventListener('click', () => clearSelection());
     }
 
     function startPolling() {
@@ -143,6 +166,10 @@
     }
 
     // --- API & Data Fetching ---
+
+    function post(endpoint, body) {
+        return fetchJSON(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    }
 
     async function fetchJSON(endpoint, options = {}) {
         const url = API_BASE + endpoint;
@@ -161,7 +188,11 @@
         if (!data) return;
 
         state.lastPollTime = Date.now();
+        const modeChanged = state.mode !== data.mode;
         state.mode = data.mode;
+        state.scanning = !!data.scanning;
+        updateEncodeSelectedUI();
+        if (modeChanged) renderFolders();  // checkboxes and Encode buttons depend on the mode
         state.paused = data.paused;
         state.connState = 'Live';
         updateModeBadge();
@@ -204,8 +235,10 @@
     // --- UI Updates ---
 
     function updateConnectionUI() {
-        els.conn.textContent = state.connState;
-        els.conn.className = 'pill ' + (state.connState === 'Live' ? '' : 'warn');
+        if (els.conn) {
+            els.conn.textContent = state.connState;
+            els.conn.className = 'pill ' + (state.connState === 'Live' ? '' : 'warn');
+        }
     }
 
     function updateTiles(totals) {
@@ -213,37 +246,34 @@
         const fmtPct = (p) => p ? Math.round(p) + '%' : '-';
 
         // Library size (original_bytes)
-        els.tiles[0].val = fmtBytes(totals.original_bytes);
-        els.tiles[0].sub = totals.files + ' files';
+        els.tiles[0].dataset.val = fmtBytes(totals.original_bytes);
+        els.tiles[0].dataset.sub = totals.files + ' files';
 
         // Size now (current_bytes + extra_bytes)
         const nowBytes = totals.current_bytes + totals.extra_bytes;
-        els.tiles[1].val = fmtBytes(nowBytes);
-        els.tiles[1].sub = totals.extra_bytes > 0 ? `+${formatBytes(totals.extra_bytes)} waiting for confirm` : '';
+        els.tiles[1].dataset.val = fmtBytes(nowBytes);
+        els.tiles[1].dataset.sub = totals.extra_bytes > 0 ? `+${formatBytes(totals.extra_bytes)} waiting for confirm` : '';
 
         // Saved so far (saved_bytes)
-        els.tiles[2].val = fmtBytes(totals.saved_bytes);
+        els.tiles[2].dataset.val = fmtBytes(totals.saved_bytes);
         const savedPct = totals.original_bytes > 0 ? (totals.saved_bytes / totals.original_bytes * 100) : 0;
-        els.tiles[2].sub = fmtPct(savedPct);
+        els.tiles[2].dataset.sub = fmtPct(savedPct);
 
         // Projected (projected_bytes)
-        els.tiles[3].val = fmtBytes(totals.projected_bytes);
+        els.tiles[3].dataset.val = fmtBytes(totals.projected_bytes);
         const projSaved = totals.projected_bytes > 0 && totals.original_bytes > 0 
             ? ((totals.original_bytes - totals.projected_bytes) / totals.original_bytes * 100) 
             : 0;
-        els.tiles[3].sub = `saves ${Math.round(projSaved)}%`;
+        els.tiles[3].dataset.sub = `saves ${Math.round(projSaved)}%`;
         
         if (state.mode === 'report') {
-            els.tiles[3].sub += ' · estimate';
+            els.tiles[3].dataset.sub += ' · estimate';
         }
-        // write the values into the four .tile elements of #tiles
-        document.querySelectorAll('#tiles .tile').forEach((tile, i) => {
-            const t = els.tiles[i];
-            if (!t) return;
+        els.tiles.forEach(tile => {
             const v = tile.querySelector('.tile-value');
             const sub = tile.querySelector('.tile-sub');
-            if (v) v.textContent = t.val;
-            if (sub) sub.textContent = t.sub || '';
+            if (v) v.textContent = tile.dataset.val || '';
+            if (sub) sub.textContent = tile.dataset.sub || '';
         });
     }
 
@@ -265,7 +295,11 @@
         const memStr = sys.mem_bytes !== null && sys.mem_limit !== null 
             ? `${formatBytes(sys.mem_bytes)} of ${formatBytes(sys.mem_limit)}` 
             : '-';
-        els.sysline.textContent = `Encoder container: CPU ${cpuStr} of ${Math.round(sys.cpus)} cores · memory ${memStr}`;
+        let text = `Encoder container: CPU ${cpuStr} of ${Math.round(sys.cpus)} cores · memory ${memStr}`;
+        if (state.scanning) {
+            text += ' · scanning library…';
+        }
+        els.sysline.textContent = text;
     }
 
     function updateJobList(jobs) {
@@ -387,6 +421,26 @@
         const header = document.createElement('div');
         header.className = 'folder-header';
 
+        // Checkbox for manual mode
+        if (state.mode === 'manual') {
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'pick';
+            checkbox.setAttribute('aria-label', `Select ${folder.name}`);
+            checkbox.checked = state.selectedFolders.has(key);
+            checkbox.addEventListener('click', (e) => e.stopPropagation());
+            checkbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+                if (e.target.checked) {
+                    state.selectedFolders.add(key);
+                } else {
+                    state.selectedFolders.delete(key);
+                }
+                updateEncodeSelectedUI();
+            });
+            header.appendChild(checkbox);
+        }
+
         const nameSpan = document.createElement('span');
         nameSpan.className = 'folder-name';
         nameSpan.textContent = folder.name;
@@ -404,16 +458,24 @@
         const prioBtn = document.createElement('button');
         prioBtn.className = 'btn btn-prio';
         prioBtn.textContent = 'Up next';
-        // Enable if there are pending files and it's not the highest possible priority (usually 5).
-        if (folder.pending > 0 && folder.priority < 5) {
-            prioBtn.disabled = false;
-            prioBtn.onclick = () => changePriority(folder.library, folder.name, folder.priority + 1);
-        }
+        // only useful while the series still has files waiting
+        prioBtn.disabled = !(folder.pending > 0);
+        if (prioBtn.disabled) prioBtn.title = 'Nothing left to do in this series';
+        prioBtn.onclick = () => changePriority(folder.library, folder.name, folder.priority + 1);
 
         const pauseBtn = document.createElement('button');
         pauseBtn.className = 'btn btn-pause';
         pauseBtn.textContent = folder.paused ? 'Resume' : 'Pause';
         pauseBtn.onclick = () => toggleFolderPause(folder.library, folder.name);
+
+        // Encode button for manual mode
+        if (state.mode === 'manual') {
+            const encodeBtn = document.createElement('button');
+            encodeBtn.className = 'btn btn-encode';
+            encodeBtn.textContent = folder.encode ? 'Stop encoding' : 'Encode';
+            encodeBtn.onclick = () => toggleFolderEncode(folder.library, folder.name);
+            btnGroup.appendChild(encodeBtn);
+        }
 
         btnGroup.appendChild(prioBtn);
         btnGroup.appendChild(pauseBtn);
@@ -434,6 +496,14 @@
         setStatusChip(statusChip, stateClass, folder);
         setStatusText(statusText, stateClass, folder);
         statusRow.append(statusChip, statusText);
+
+        // Status chip for queued in manual mode
+        if (state.mode === 'manual' && folder.encode) {
+            const queuedChip = document.createElement('span');
+            queuedChip.className = 'status-chip queued';
+            queuedChip.textContent = 'Encode queued';
+            statusRow.appendChild(queuedChip);
+        }
 
         // Big saving number and before -> after
         const known = folder.encoded + folder.predicted + folder.staged + folder.confirmed > 0;
@@ -467,7 +537,9 @@
         body.append(statusRow, statsRow, bar, count);
 
         // Click to open detail
+        div.classList.toggle('marked', !!folder.encode);
         div.addEventListener('click', (e) => {
+            if (e.target.closest('button, input, label')) return;  // card buttons and checkboxes do their own thing
             if (e.target.closest('.folder')) {
                 KKDetail.open(folder.library, folder.name, refreshFolders);
             }
@@ -579,30 +651,63 @@
 
     async function togglePause() {
         const current = state.paused;
-        await fetchJSON('/pause', { method: 'POST', body: JSON.stringify({ paused: !current }) });
+        await post('/api/pause', { paused: !current });
         // Force a quick poll to update UI immediately
         await pollStatus();
     }
 
-    async function setParallel(active) {
-        const val = active ? state.parallel : 1;
-        await fetchJSON('/parallel', { method: 'POST', body: JSON.stringify({ parallel: val }) });
+    async function encodeSelected() {
+        const foldersToEncode = [];
+        state.selectedFolders.forEach(key => {
+            const f = state.foldersCache[key];
+            if (f) {
+                foldersToEncode.push({ library: f.library, folder: f.name });
+            }
+        });
+
+        if (foldersToEncode.length === 0) return;
+
+        await post('/api/encode', { folders: foldersToEncode, encode: true });
+        clearSelection();
+        fetchFoldersAndLibraries();
+    }
+
+    function clearSelection() {
+        state.selectedFolders.clear();
+        updateEncodeSelectedUI();
+    }
+
+    function updateEncodeSelectedUI() {
+        const count = state.selectedFolders.size;
+        if (!els.encodeSelectedBtn) return;
+        els.encodeSelectedBtn.hidden = els.clearSelectedBtn.hidden = state.mode !== 'manual';
+        els.encodeSelectedBtn.disabled = count === 0;
+        els.encodeSelectedBtn.textContent = count > 0 ? `Encode selected (${count})` : 'Encode selected';
+    }
+
+    function cached(library, name) {
+        return state.foldersCache[`${library}/${name}`] || {};
+    }
+
+    async function toggleFolderEncode(library, folder) {
+        await post('/api/folder', { library, folder, encode: !cached(library, folder).encode });
+        fetchFoldersAndLibraries();
+    }
+
+    async function setParallel() {
+        await post('/api/parallel', { parallel: state.parallel });
+        await pollStatus();
     }
 
     async function changePriority(library, folder, newPriority) {
-        await fetchJSON('/folder', {
-            method: 'POST',
-            body: JSON.stringify({ library, folder, priority: newPriority })
-        });
-        // Refresh to see updated priority/order
+        // "Up next": one above the highest priority of all series
+        const top = Math.max(0, ...Object.values(state.foldersCache).map(f => f.priority || 0));
+        await post('/api/folder', { library, folder, priority: Math.max(newPriority, top + 1) });
         fetchFoldersAndLibraries();
     }
 
     async function toggleFolderPause(library, folder) {
-        await fetchJSON('/folder-action', {
-            method: 'POST',
-            body: JSON.stringify({ library, folder, action: folder.paused ? 'resume' : 'pause' })
-        });
+        await post('/api/folder', { library, folder, paused: !cached(library, folder).paused });
         fetchFoldersAndLibraries();
     }
 
@@ -617,7 +722,7 @@
 
     // Update mode badge text
     function updateModeBadge() {
-        els.mode.textContent = state.mode === 'report' ? 'Report only' : 'Staging copies';
+        els.mode.textContent = { report: 'Report only', stage: 'Staging copies', manual: 'Manual: selected series only' }[state.mode] || '';
     }
 
     // Update library chart labels to use folders count

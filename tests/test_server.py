@@ -184,6 +184,21 @@ class Api(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError):
             self.get(f"/frames/{os.path.basename(d)}/../x.jpg")
 
+    def test_encode_many(self):
+        # Film only: marking a series sends its estimates back to the queue, which would change Show's numbers
+        items = [{"library": "Anime", "folder": "Film"}, {"library": "Anime", "folder": "Empty"}]
+        r = self.post("/api/encode", {"folders": items, "encode": True})
+        self.assertEqual(r["updated"], 2)
+        fs = {f["name"]: f for f in json.loads(self.get("/api/folders")[2])}
+        self.assertTrue(fs["Film"]["encode"])
+        self.assertFalse(fs["Show"]["encode"])
+        self.post("/api/encode", {"folders": items, "encode": False})
+        s = json.loads(self.get("/api/status")[2])
+        self.assertIn("scanning", s)
+
+    def test_mode_manual_allowed(self):
+        self.assertEqual(server.config_from_env({"RX_ROOTS": "/a", "RX_MODE": "manual"})["mode"], "manual")
+
     def test_unknown_is_404(self):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.get("/nope")

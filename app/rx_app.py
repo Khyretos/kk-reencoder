@@ -49,9 +49,11 @@ class App:
         paused = rx_db.get_state(self.conn, "paused", "0") == "1"
         jobs = []
         blocked = None
+        scanning = False
         if self.worker:
             jobs = self.worker.jobs_list()
             blocked = self.worker.blocked
+            scanning = getattr(self.worker, 'scanning', False)
 
         # a job's ffmpeg processes name either the file itself or the job's own work folder
         keys = {j["path"]: [j["path"], hashlib.sha1(j["path"].encode()).hexdigest()[:12]] for j in jobs}
@@ -68,6 +70,7 @@ class App:
             "encoder": self.cfg["encoder"],
             "target_vmaf": self.cfg["target_vmaf"],
             "paused": paused,
+            "scanning": scanning,
             "jobs": jobs,
             "blocked": blocked,
             "staged_bytes": rx_db.staged_bytes(self.conn),
@@ -114,13 +117,21 @@ class App:
         return self.status()
 
     def set_folder(self, library: str, folder: str, priority: Optional[int] = None,
-                   paused: Optional[bool] = None) -> Dict[str, Any]:
+                   paused: Optional[bool] = None, encode: Optional[bool] = None) -> Dict[str, Any]:
         """Change a folder's priority or pause; returns that folder's summary."""
-        rx_db.set_folder(self.conn, library, folder, priority=priority, paused=paused)
+        rx_db.set_folder(self.conn, library, folder, priority=priority, paused=paused, encode=encode)
         for f in rx_db.folders(self.conn):
             if f["library"] == library and f["name"] == folder:
                 return f
         raise KeyError(f"{library}/{folder}")
+
+    def encode_many(self, items: List[Dict[str, Any]], encode: bool) -> Dict[str, Any]:
+        """Mark (or unmark) several series for re-encoding at once."""
+        n = 0
+        for it in items:
+            rx_db.set_folder(self.conn, it["library"], it["folder"], encode=bool(encode))
+            n += 1
+        return {"updated": n}
 
     def rescan(self) -> None:
         """Start a background scan."""

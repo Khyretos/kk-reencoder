@@ -150,6 +150,22 @@ class Worker(unittest.TestCase):
         self.assertEqual(len([n for n in names if n.endswith("-a.jpg")]), len([n for n in names if n.endswith("-b.jpg")]))
         self.assertTrue(os.path.exists(os.path.join(cfg["report_dir"], "Anime", "Show", "encoding_report.json")))
 
+    def test_manual_mode_stages_only_marked_series(self):
+        run = FakeFfmpeg()
+        orig = os.path.join(self.lib, "Show/Season 1/e1.mkv")
+        with open(orig, "wb") as fh:
+            fh.write(b"\0" * 400 * 1024)
+        w.scan(self.c, [self.lib], self.cfg, probe=fake_probe)
+        cfg = dict(self.cfg, mode="manual", frames_dir=os.path.join(self.tmp, "frames"), roots=[self.lib])
+        f = rx_db.next_file(self.c)
+        w.process(self.c, f, cfg, run, probe=fake_probe)
+        self.assertEqual(rx_db.get_file(self.c, orig)["status"], "predicted")  # not marked: estimate only
+        self.assertFalse(os.path.exists(rx_stage.staged_path(orig)))
+        rx_db.set_folder(self.c, "Anime", "Show", encode=True)
+        w.process(self.c, rx_db.next_file(self.c), cfg, run, probe=fake_probe)
+        self.assertEqual(rx_db.get_file(self.c, orig)["status"], "staged")
+        self.assertTrue(os.path.exists(rx_stage.staged_path(orig)))
+
     def test_stage_refuses_when_not_smaller(self):
         run = FakeFfmpeg()
         w.scan(self.c, [self.lib], self.cfg, probe=fake_probe)

@@ -79,6 +79,16 @@ class OrderFolders(unittest.TestCase):
         self.assertEqual([f["name"] for f in m.order_folders(folders)], ["zulu", "Alpha", "beta"])
 
 
+class OrderEncodeFirst(unittest.TestCase):
+    def test_series_marked_for_encoding_go_first(self):
+        folders = [
+            {"name": "alpha", "priority": 5, "paused": False, "pending": 2, "encode": False},
+            {"name": "zulu", "priority": 0, "paused": False, "pending": 1, "encode": True},
+            {"name": "beta", "priority": 0, "paused": False, "pending": 1},  # no key = not marked
+        ]
+        self.assertEqual([f["name"] for f in m.order_folders(folders)], ["zulu", "alpha", "beta"])
+
+
 class Search(unittest.TestCase):
     def test_first_try_is_start(self):
         self.assertEqual(m.next_quality([], 95, 10, 40, start=24), 24)

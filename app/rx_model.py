@@ -131,18 +131,29 @@ def skip_reason(info: Dict[str, Any], cfg: Dict[str, Any]) -> Optional[str]:
 
 
 def order_folders(folders: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Sort folders by priority (descending) then name (case-insensitive ascending).
+    """Sort folders by encode flag, then priority, then name.
+
+    Folders marked for encoding come first. Within each group, sort by
+    priority descending, then name case-insensitive ascending.
 
     Only includes folders that are not paused and have pending > 0.
 
     Args:
-        folders: List of dicts with 'name', 'priority', 'paused', 'pending'.
+        folders: List of dicts with 'name', 'priority', 'paused', 'pending',
+                 and optionally 'encode' (bool).
 
     Returns:
         Sorted list of folders meeting the criteria.
     """
     filtered = [f for f in folders if not f.get('paused', True) and f.get('pending', 0) > 0]
-    return sorted(filtered, key=lambda f: (-f['priority'], f['name'].lower()))
+    
+    def sort_key(f):
+        # encode=True comes before encode=False or missing
+        encode_flag = f.get('encode', False)
+        # Sort by: encode (False first), priority (desc), name (asc)
+        return (not encode_flag, -f['priority'], f['name'].lower())
+    
+    return sorted(filtered, key=sort_key)
 
 
 def next_quality(trials: List[Dict[str, Any]], target: float, lo: int, hi: int, start: int) -> Optional[int]:

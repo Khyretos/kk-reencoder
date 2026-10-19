@@ -44,8 +44,6 @@ def write_report(conn, library, folder, cfg, in_media=False):
 
     Returns the report dict.
     """
-    import rx_model
-    import rx_db
 
     report = rx_model.folder_report(
         library,
@@ -85,7 +83,6 @@ def make_frames(path, staged, info, worst, cfg, run):
 
     Returns the list of times used.
     """
-    import rx_stage
 
     times = rx_stage.frame_times(info["duration_s"], worst, 5)
     d = rx_stage.frames_dir(cfg["frames_dir"], path)
@@ -139,7 +136,6 @@ def process(conn, f, cfg, run, probe=None, progress=None):
     # Step 1: Probe
     info = probe(path)
     if info is None:
-        import rx_db
         rx_db.set_result(conn, f["path"], status="failed", error="unreadable")
         return
 
@@ -160,23 +156,26 @@ def process(conn, f, cfg, run, probe=None, progress=None):
             progress["phase"] = "searching quality"
         res = search_file(path, info, cfg, run, lib)
         if res is None or res.get("q") is None:
-            import rx_db
             rx_db.set_result(conn, f["path"], status="skipped", reason="no smaller encode at target quality")
             write_report(conn, lib, folder, cfg, in_media=False)
             return
         q, vmaf, ratio, worst = res["q"], res["vmaf"], res["ratio"], res["worst"]
 
+    # Compute effective mode for report/stage branches
+    # manual: only series marked for encoding on the page are staged, the rest is estimated
+    effective_mode = cfg.get("mode")
+    if effective_mode == "manual":
+        effective_mode = "stage" if rx_db.folder_encode(conn, f["library"], f["folder"]) else "report"
+
     # Step 3: Report mode
-    if cfg.get("mode") == "report":
-        import rx_db
+    if effective_mode == "report":
         new_bytes = int(f["size"] * ratio)
         rx_db.set_result(conn, f["path"], status="predicted", quality=q, vmaf=vmaf, new_bytes=new_bytes)
         write_report(conn, lib, folder, cfg, in_media=False)
         return
 
-    # Step 4: Stage mode
-    if cfg.get("mode") == "stage":
-        import rx_stage
+    # Step 4: Stage mode (handles 'stage' and 'manual')
+    if effective_mode == "stage":
         import rx_media
 
         staged = rx_stage.staged_path(path)
@@ -208,7 +207,6 @@ def process(conn, f, cfg, run, probe=None, progress=None):
 
         rc, out, err = run(cmd, on_line=on_line)
         if rc != 0:
-            import rx_db
             rx_db.set_result(conn, f["path"], status="failed", error=err[-500:] if err else "encode failed")
             if os.path.exists(part):
                 os.remove(part)
@@ -218,7 +216,6 @@ def process(conn, f, cfg, run, probe=None, progress=None):
         # Probe the result
         new_info = probe(part)
         if new_info is None:
-            import rx_db
             rx_db.set_result(conn, f["path"], status="failed", error="probe failed on encoded file")
             if os.path.exists(part):
                 os.remove(part)
@@ -226,7 +223,6 @@ def process(conn, f, cfg, run, probe=None, progress=None):
             return
 
         if new_info["codec"] != "av1":
-            import rx_db
             rx_db.set_result(conn, f["path"], status="failed", error="bad codec")
             if os.path.exists(part):
                 os.remove(part)
@@ -235,7 +231,6 @@ def process(conn, f, cfg, run, probe=None, progress=None):
 
         dur_diff = abs(new_info["duration_s"] - info["duration_s"])
         if dur_diff > 2:
-            import rx_db
             rx_db.set_result(conn, f["path"], status="failed", error="bad duration")
             if os.path.exists(part):
                 os.remove(part)
@@ -244,7 +239,6 @@ def process(conn, f, cfg, run, probe=None, progress=None):
 
         new_size = os.path.getsize(part)
         if new_size > f["size"] * cfg["max_ratio"]:
-            import rx_db
             rx_db.set_result(conn, f["path"], status="skipped", reason="encode not smaller")
             if os.path.exists(part):
                 os.remove(part)
@@ -260,7 +254,6 @@ def process(conn, f, cfg, run, probe=None, progress=None):
         make_frames(path, staged, info, worst, cfg, run)
 
         # Set result
-        import rx_db
         rx_db.set_result(
             conn, f["path"],
             status="staged",
@@ -276,6 +269,5 @@ def process(conn, f, cfg, run, probe=None, progress=None):
         return
 
     # If no mode matches, treat as failed
-    import rx_db
     rx_db.set_result(conn, f["path"], status="failed", error="unknown mode")
     return

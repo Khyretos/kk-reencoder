@@ -101,6 +101,34 @@ class Pool(unittest.TestCase):
         finally:
             pool.stop()
 
+    def test_scan_does_not_block_encoding(self):
+        conn = rx_db.connect(":memory:")
+        add(conn, 2)
+        started = threading.Event()
+        release = threading.Event()
+        seen = []
+
+        def slow_scan(*a, **k):
+            started.set()
+            release.wait(5)  # a long library scan
+            return 0
+
+        def fake_process(conn_, f, cfg_, run, probe=None, progress=None):
+            seen.append(f["path"])
+            rx_db.set_result(conn_, f["path"], status="predicted", new_bytes=1)
+
+        pool = rx_pool.Worker(conn, {"parallel": 1, "idle_s": 0.05, "rescan_s": 3600, "roots": ["/x"], "max_staged_gb": 1000},
+                              process=fake_process, scan=slow_scan)
+        pool.start()
+        try:
+            self.assertTrue(started.wait(2))
+            self.assertTrue(self.wait_for(lambda: len(seen) == 2))  # encoded while the scan still runs
+            self.assertTrue(pool.scanning)
+        finally:
+            release.set()
+            pool.stop()
+        self.assertTrue(self.wait_for(lambda: not pool.scanning))
+
     def test_running_rows_reset_on_start(self):
         conn, pool, gate, seen, peak = self.make(1)
         rx_db.set_result(conn, "/m/A/Show/00.mkv", status="running")

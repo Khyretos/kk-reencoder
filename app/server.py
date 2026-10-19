@@ -306,11 +306,12 @@ def make_server(app, host, port):
                 folder = data.get("folder")
                 priority = data.get("priority")
                 paused = data.get("paused")
+                encode = data.get("encode")
                 if not library or not folder:
                     self._send_json(400, {"error": "Missing library or folder"})
                     return
                 try:
-                    result = app.set_folder(library, folder, priority=priority, paused=paused)
+                    result = app.set_folder(library, folder, priority=priority, paused=paused, encode=encode)
                     self._send_json(200, result)
                 except KeyError:
                     self._send_json(404, {"error": "Not Found"})
@@ -318,6 +319,21 @@ def make_server(app, host, port):
                     self._send_json(409, {"error": "Stage Error"})
                 except ValueError:
                     self._send_json(400, {"error": "Invalid Parameters"})
+                except Exception as e:
+                    self._send_json(500, {"error": str(e)})
+                return
+
+            if path == "/api/encode":
+                folders = data.get("folders")
+                encode_flag = data.get("encode")
+                if not isinstance(folders, list):
+                    self._send_json(400, {"error": "folders must be a list"})
+                    return
+                try:
+                    result = app.encode_many(folders, encode_flag)
+                    self._send_json(200, result)
+                except KeyError:
+                    self._send_json(404, {"error": "Not Found"})
                 except Exception as e:
                     self._send_json(500, {"error": str(e)})
                 return

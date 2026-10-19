@@ -1089,3 +1089,13 @@ header.top nav.nav { display: flex; gap: 6px; margin-left: auto; }
 #folders.list span.folder-name { width: auto; }
 #folders.list div.folder-actions { margin-top: 0; }
 @media (max-width: 760px) { header.top { position: static; } }
+
+/* manual mode: pick series to encode */
+input.pick { width: 18px; height: 18px; accent-color: #f3941f; margin: 0 4px 0 0; flex: 0 0 auto; cursor: pointer; }
+.folder.marked { box-shadow: 0 0 0 1px #f3941f, 0 0 18px rgba(243,148,31,.25); }
+.status-chip.queued { color: #1c1329; background: #f3941f; padding: 1px 8px; border-radius: 999px; font-weight: 700; margin-right: 6px; }
+.status-chip.queued::before { display: none; }
+button.btn-encode { white-space: nowrap; }
+#encode-selected[disabled] { opacity: .5; cursor: default; }
+@media (prefers-color-scheme: light) { .folder.marked { box-shadow: 0 0 0 1px #8a5a00, 0 0 18px rgba(138,90,0,.18); } }
+button.btn[disabled] { opacity: .45; cursor: default; }

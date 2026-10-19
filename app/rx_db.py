@@ -73,6 +73,16 @@ def connect(path: str) -> "LockedConnection":
     
     # Create tables if missing
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS folders (
+            library TEXT,
+            name TEXT,
+            priority INTEGER DEFAULT 0,
+            paused INTEGER DEFAULT 0,
+            encode INTEGER DEFAULT 0,
+            PRIMARY KEY (library, name)
+        )
+    """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS files (
             path TEXT PRIMARY KEY,
             library TEXT,
@@ -96,21 +106,16 @@ def connect(path: str) -> "LockedConnection":
         )
     """)
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS folders (
-            library TEXT,
-            name TEXT,
-            priority INTEGER DEFAULT 0,
-            paused INTEGER DEFAULT 0,
-            PRIMARY KEY (library, name)
-        )
-    """)
-    conn.execute("""
         CREATE TABLE IF NOT EXISTS state (
             key TEXT PRIMARY KEY,
             value TEXT
         )
     """)
     conn.commit()
+    # databases from before the encode flag get the column
+    if "encode" not in [r["name"] for r in conn.execute("PRAGMA table_info(folders)").fetchall()]:
+        conn.execute("ALTER TABLE folders ADD COLUMN encode INTEGER DEFAULT 0")
+        conn.commit()
     return LockedConnection(conn)
 
 
@@ -242,7 +247,7 @@ def set_result(conn: sqlite3.Connection, path: str, **fields: Any) -> None:
         conn.commit()
 
 
-def set_folder(conn: sqlite3.Connection, library: str, name: str, priority: Optional[int] = None, paused: Optional[bool] = None) -> None:
+def set_folder(conn: sqlite3.Connection, library: str, name: str, priority: Optional[int] = None, paused: Optional[bool] = None, encode: Optional[bool] = None) -> None:
     """
     Insert or update a folder configuration.
 
@@ -252,6 +257,7 @@ def set_folder(conn: sqlite3.Connection, library: str, name: str, priority: Opti
         name: Folder name.
         priority: Priority level (optional).
         paused: Paused status (optional, stored as 0/1).
+        encode: Encode flag (optional, stored as 0/1).
     """
     # Insert if missing
     conn.execute(
@@ -271,6 +277,29 @@ def set_folder(conn: sqlite3.Connection, library: str, name: str, priority: Opti
             "UPDATE folders SET paused = ? WHERE library = ? AND name = ?",
             (1 if paused else 0, library, name)
         )
+    
+    if encode is not None:
+        # Ensure the column exists before updating
+        cursor = conn.execute("PRAGMA table_info(folders)")
+        columns = [row["name"] for row in cursor.fetchall()]
+        
+        if "encode" not in columns:
+            conn.execute(
+                "ALTER TABLE folders ADD COLUMN encode INTEGER DEFAULT 0"
+            )
+        
+        conn.execute(
+            "UPDATE folders SET encode = ? WHERE library = ? AND name = ?",
+            (1 if encode else 0, library, name)
+        )
+        
+        # If marking for encoding, reset predicted files to pending
+        if encode:
+            conn.execute("""
+                UPDATE files 
+                SET status = 'pending', new_bytes = NULL 
+                WHERE library = ? AND folder = ? AND status = 'predicted'
+            """, (library, name))
     
     conn.commit()
 
@@ -354,6 +383,8 @@ def folders(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
             "name": fld,
             "priority": conn.execute("SELECT priority FROM folders WHERE library = ? AND name = ?", (lib, fld)).fetchone()["priority"],
             "paused": bool(conn.execute("SELECT paused FROM folders WHERE library = ? AND name = ?", (lib, fld)).fetchone()["paused"]),
+            "encode": folder_encode(conn, lib, fld),
+            "encode": bool(conn.execute("SELECT encode FROM folders WHERE library = ? AND name = ?", (lib, fld)).fetchone()["encode"]),
             "files": sum(counts.values()),
             "pending": pending,
             "encoded": encoded,
@@ -524,3 +555,10 @@ def reset_running(conn: sqlite3.Connection) -> int:
     n = conn.execute("UPDATE files SET status = 'pending' WHERE status = 'running'").rowcount
     conn.commit()
     return n
+
+
+def folder_encode(conn, library: str, name: str) -> bool:
+    """True when the series is marked for re-encoding on the page."""
+    row = conn.execute("SELECT encode FROM folders WHERE library = ? AND name = ?", (library, name)).fetchone()
+    return bool(row and row["encode"])
+

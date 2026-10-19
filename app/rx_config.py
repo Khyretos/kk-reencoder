@@ -58,15 +58,18 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         # When empty, use every directory in /media
         media_path = "/media"
         if os.path.exists(media_path):
-            roots = [os.path.join(media_path, d) for d in os.listdir(media_path)
-                     if os.path.isdir(os.path.join(media_path, d))]
+            try:
+                roots = [os.path.join(media_path, d) for d in os.listdir(media_path)
+                         if os.path.isdir(os.path.join(media_path, d))]
+            except PermissionError:
+                roots = []
         else:
             roots = []
 
     # Parse mode
     mode = env.get("RX_MODE", "report").strip()
-    if mode not in ("report", "stage"):
-        raise ValueError(f"Invalid mode '{mode}'. Must be 'report' or 'stage'.")
+    if mode not in ("report", "stage", "manual"):
+        raise ValueError(f"Invalid mode '{mode}'. Must be 'report', 'stage' or 'manual'.")
 
     # Parse encoder
     encoder = env.get("RX_ENCODER", "qsv").strip()
@@ -131,13 +134,13 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     }
 
     # Parse work_dir
-    work_dir = env.get("RX_WORK_DIR", "/data/work").strip()
+    work_dir = env.get("RX_WORK_DIR", "/tmp/reencoder_work").strip()
 
     # Parse report_dir
-    report_dir = env.get("RX_REPORT_DIR", "/data/reports").strip()
+    report_dir = env.get("RX_REPORT_DIR", "/tmp/reencoder_reports").strip()
 
     # Parse frames_dir
-    frames_dir = env.get("RX_FRAMES_DIR", "/data/frames").strip()
+    frames_dir = env.get("RX_FRAMES_DIR", "/tmp/reencoder_frames").strip()
 
     # Parse max_staged_gb
     max_staged_gb = parse_float(env.get("RX_MAX_STAGED_GB", "1000"), 1000.0)

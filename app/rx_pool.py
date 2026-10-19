@@ -37,17 +37,22 @@ class Worker:
         self.lock = threading.Lock()
         self._jobs: Dict[str, Dict[str, Any]] = {}
         self.blocked: Optional[str] = None
+        self.scanning: bool = False
         self._stop = threading.Event()
+        self._scan_thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
-        """Start the scheduler thread."""
+        """Start the scheduler and scan threads."""
         rx_db.reset_running(self.conn)
-        t = threading.Thread(target=self._scheduler_loop, daemon=True)
-        t.start()
+        self._start_scheduler_thread()
+        self._start_scan_thread()
 
     def stop(self) -> None:
-        """Signal the scheduler to stop."""
+        """Signal the scheduler and scan threads to stop."""
         self._stop.set()
+        if self._scan_thread is not None:
+            self._scan_thread.join(timeout=2.0)
+            self._scan_thread = None
 
     def jobs_list(self) -> List[Dict[str, Any]]:
         """Return a copy of current job progress dicts."""
@@ -64,20 +69,15 @@ class Worker:
             val = 2
         return max(1, min(5, val))
 
+    def _start_scheduler_thread(self) -> None:
+        """Start the background scheduler thread."""
+        if not hasattr(self, "_scheduler_thread") or self._scheduler_thread is None or not self._scheduler_thread.is_alive():
+            self._scheduler_thread = threading.Thread(target=self._scheduler_loop, args=(), daemon=True)
+            self._scheduler_thread.start()
+
     def _scheduler_loop(self) -> None:
-        """Main scheduler loop."""
-        last_scan = time.monotonic() - self.cfg.get("rescan_s", 0)
-
+        """Hand out files to encode, up to parallel() at a time, also while a scan runs."""
         while not self._stop.is_set():
-            now = time.monotonic()
-
-            # Rescan if enough time passed (or at start)
-            if self.cfg.get("rescan_s") and (now - last_scan) >= self.cfg["rescan_s"]:
-                try:
-                    self.scan(self.conn, self.cfg["roots"], self.cfg, probe=self.probe)
-                except Exception:
-                    traceback.print_exc()
-                last_scan = now
 
             # Check pause state
             if rx_db.get_state(self.conn, "paused", "0") == "1":
@@ -129,6 +129,25 @@ class Worker:
                 daemon=True,
             )
             t.start()
+
+    def _start_scan_thread(self) -> None:
+        """Start the background scan thread."""
+        if self._scan_thread is None or not self._scan_thread.is_alive():
+            self._scan_thread = threading.Thread(target=self._scan_loop, daemon=True)
+            self._scan_thread.start()
+
+    def _scan_loop(self) -> None:
+        """Rescan the library in this thread so encoding never waits for a scan."""
+        while not self._stop.is_set():
+            self.scanning = True
+            try:
+                self.scan(self.conn, self.cfg["roots"], self.cfg, probe=self.probe)
+            except Exception:
+                traceback.print_exc()
+            finally:
+                self.scanning = False
+            if not self.cfg.get("rescan_s") or self._stop.wait(self.cfg["rescan_s"]):
+                return
 
     def _worker_thread(self, conn: Any, f: Dict[str, Any], cfg: Dict[str, Any], run, probe) -> None:
         """Worker thread for a single file."""
