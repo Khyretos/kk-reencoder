@@ -129,6 +129,25 @@ class Pool(unittest.TestCase):
             pool.stop()
         self.assertTrue(self.wait_for(lambda: not pool.scanning))
 
+    def test_scan_on_request_and_last_scan(self):
+        conn = rx_db.connect(":memory:")
+        calls = []
+
+        def scan(*a, **k):
+            calls.append(k.get("only"))
+            return 0
+
+        pool = rx_pool.Worker(conn, {"parallel": 1, "idle_s": 0.05, "rescan_s": 3600, "roots": ["/x"], "max_staged_gb": 1000},
+                              process=lambda *a, **k: None, scan=scan)
+        pool.start()
+        try:
+            self.assertTrue(self.wait_for(lambda: len(calls) == 1))
+            self.assertTrue(self.wait_for(lambda: rx_db.get_state(conn, "last_scan", "")))  # set once the scan finished
+            pool.request_scan()
+            self.assertTrue(self.wait_for(lambda: len(calls) == 2))  # a full rescan before the hour is over
+        finally:
+            pool.stop()
+
     def test_running_rows_reset_on_start(self):
         conn, pool, gate, seen, peak = self.make(1)
         rx_db.set_result(conn, "/m/A/Show/00.mkv", status="running")

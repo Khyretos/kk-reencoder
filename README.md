@@ -123,7 +123,8 @@ Notes:
 | `RX_SKIP_HDR` | `true` | Skip HDR files. |
 | `RX_CODECS` | `h264,hevc,mpeg4,vc1,mpeg2video,wmv3,msmpeg4v3` | Source codecs to consider (AV1 is always skipped). |
 | `RX_MAX_HEIGHT` | `2160` | Skip taller videos. |
-| `RX_RESCAN_S` | `21600` | Rescan the library every N seconds, in the background. |
+| `RX_RESCAN_S` | `86400` | Rescan the library every N seconds (once a day), in the background. Also on the Settings screen. |
+| `RX_CHECK_EVERY_EPISODE` | `true` | `false`: once a series has its quality, later episodes skip the CPU check sample. Also on the Settings screen. |
 | `RX_SEARCH_PER_FOLDER` | `2` | Files to search per series before locking quality. |
 | `RX_PORT` | `8080` | Web UI port. |
 

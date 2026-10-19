@@ -17,107 +17,78 @@ from typing import Optional, Set
 VIDEO_EXT = ('.mkv', '.mp4', '.m4v', '.avi', '.ts', '.mov', '.wmv')
 
 
-def scan(
-    conn,
-    roots: list[str],
-    cfg: dict,
-    probe: Optional[callable] = None,
-) -> int:
-    """
-    Scan library roots for video files, probe them, and upsert records.
+def _walk(top: str):
+    """Video files under top, directories and files sorted case-insensitively, hidden ones skipped."""
+    for dirpath, dirnames, filenames in os.walk(top):
+        dirnames[:] = sorted((d for d in dirnames if not d.startswith(".")), key=str.lower)
+        for name in sorted(filenames, key=str.lower):
+            if not name.startswith(".") and name.lower().endswith(VIDEO_EXT):
+                yield os.path.join(dirpath, name)
 
-    Args:
-        conn: SQLite connection (rx_db.connect(...)).
-        roots: List of root paths to walk.
-        cfg: Configuration dict (used by rx_model.skip_reason).
-        probe: Function(path) -> info dict or None. Defaults to rx_media.probe.
 
-    Returns:
-        Number of video files seen.
+def _record(conn, root: str, path: str, cfg: dict, probe) -> None:
+    """Probe a new or changed file and store it as pending or skipped (unchanged files are left alone)."""
+    import rx_db
+    import rx_model
+
+    st = os.stat(path)
+    known = rx_db.get_file(conn, path)
+    if known and known["size"] == st.st_size and known["mtime"] == st.st_mtime:
+        return
+    info = probe(path)
+    rec = {"path": path, "library": os.path.basename(root), "folder": rx_model.folder_key(root, path),
+           "size": st.st_size, "mtime": st.st_mtime, "codec": None, "height": None, "bitrate_kbps": None,
+           "duration_s": None, "status": "skipped", "reason": "unreadable"}
+    if info is not None:
+        reason = rx_model.skip_reason(info, cfg)
+        rec.update(codec=info["codec"], height=info["height"], bitrate_kbps=info["bitrate_kbps"],
+                   duration_s=info["duration_s"], status="pending" if reason is None else "skipped", reason=reason)
+    rx_db.upsert_file(conn, rec)
+
+
+KEEP = ("encoded", "staged", "confirmed", "running")  # rows that stay even when the file is not found
+
+
+def scan(conn, roots: list, cfg: dict, probe: Optional[callable] = None, only: Optional[tuple] = None) -> int:
+    """Find video files and record new or changed ones; returns how many video files were seen.
+
+    only=(library, folder) scans one series or movie folder. A library root (or the folder) that does not
+    exist is skipped and none of its rows are removed: an unmounted disk must not look like deleted files.
     """
+    import rx_db
+
     if probe is None:
         import rx_media
         probe = rx_media.probe
 
-    import rx_db
-    import rx_model
+    if only is not None:
+        library, folder = only
+        root = next((r for r in roots if os.path.basename(r) == library), None)
+        top = os.path.join(root, folder) if root else None
+        if not top or not os.path.isdir(top):
+            return 0
+        seen = set()
+        for path in _walk(top):
+            seen.add(path)
+            _record(conn, root, path, cfg, probe)
+        rows = conn.execute("SELECT path, status FROM files WHERE library = ? AND folder = ?", (library, folder)).fetchall()
+        for r in rows:
+            if r["path"] not in seen and r["status"] not in KEEP:
+                conn.execute("DELETE FROM files WHERE path = ?", (r["path"],))
+        conn.commit()
+        return len(seen)
 
-    seen_paths: Set[str] = set()
-    count = 0
-
+    seen = set()
+    found = 0
     for root in roots:
-        for dirpath, dirnames, filenames in os.walk(root):
-            # Sort case-insensitively and prune hidden dirs in place
-            dirnames.sort(key=lambda x: x.lower())
-            dirnames[:] = [d for d in dirnames if not d.startswith('.')]
-
-            filenames.sort(key=lambda x: x.lower())
-            for name in filenames:
-                if name.startswith('.'):
-                    continue
-
-                path = os.path.join(dirpath, name)
-                base = os.path.basename(path).lower()
-                if not any(base.endswith(ext) for ext in VIDEO_EXT):
-                    continue
-
-                count += 1
-                seen_paths.add(path)
-
-                # Check if already known with same size/mtime
-                existing = rx_db.get_file(conn, path)
-                if existing and existing["size"] == os.path.getsize(path) \
-                        and existing["mtime"] == os.stat(path).st_mtime:
-                    continue
-
-                info = probe(path)
-                if info is None:
-                    rec = {
-                        "path": path,
-                        "library": os.path.basename(root),
-                        "folder": rx_model.folder_key(root, path),
-                        "size": os.path.getsize(path),
-                        "mtime": os.stat(path).st_mtime,
-                        "codec": None,
-                        "height": None,
-                        "bitrate_kbps": None,
-                        "duration_s": None,
-                        "status": "skipped",
-                        "reason": "unreadable",
-                    }
-                else:
-                    reason = rx_model.skip_reason(info, cfg)
-                    if reason is not None:
-                        rec = {
-                            "path": path,
-                            "library": os.path.basename(root),
-                            "folder": rx_model.folder_key(root, path),
-                            "size": info["size"],
-                            "mtime": os.stat(path).st_mtime,
-                            "codec": info["codec"],
-                            "height": info["height"],
-                            "bitrate_kbps": info["bitrate_kbps"],
-                            "duration_s": info["duration_s"],
-                            "status": "skipped",
-                            "reason": reason,
-                        }
-                    else:
-                        rec = {
-                            "path": path,
-                            "library": os.path.basename(root),
-                            "folder": rx_model.folder_key(root, path),
-                            "size": info["size"],
-                            "mtime": os.stat(path).st_mtime,
-                            "codec": info["codec"],
-                            "height": info["height"],
-                            "bitrate_kbps": info["bitrate_kbps"],
-                            "duration_s": info["duration_s"],
-                            "status": "pending",
-                            "reason": None,
-                        }
-
-                rx_db.upsert_file(conn, rec)
-
-    # Remove DB rows for paths no longer on disk
-    rx_db.remove_missing(conn, seen_paths)
-    return count
+        if not os.path.isdir(root):
+            # keep every row of a library whose folder is missing right now
+            seen.update(r["path"] for r in conn.execute("SELECT path FROM files WHERE library = ?",
+                                                        (os.path.basename(root),)).fetchall())
+            continue
+        for path in _walk(root):
+            seen.add(path)
+            found += 1
+            _record(conn, root, path, cfg, probe)
+    rx_db.remove_missing(conn, seen)
+    return found

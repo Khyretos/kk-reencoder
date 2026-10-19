@@ -78,6 +78,35 @@ class Worker(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp)
 
+    def test_scan_one_folder(self):
+        w.scan(self.c, [self.lib], self.cfg, probe=fake_probe)
+        new = os.path.join(self.lib, "Show/Season 1/e3.mkv")
+        with open(new, "wb") as f:
+            f.write(b"\0" * 4096)
+        os.remove(os.path.join(self.lib, "Old/av1-e1.mkv"))
+        n = w.scan(self.c, [self.lib], self.cfg, probe=fake_probe, only=("Anime", "Show"))
+        self.assertEqual(n, 3)  # only Show's three files were looked at
+        self.assertEqual(rx_db.get_file(self.c, new)["status"], "pending")
+        # files outside the folder are not touched, even when they are gone
+        self.assertIsNotNone(rx_db.get_file(self.c, os.path.join(self.lib, "Old/av1-e1.mkv")))
+
+    def test_missing_root_keeps_its_rows(self):
+        # an unmounted library folder must not look like "every file was deleted"
+        w.scan(self.c, [self.lib], self.cfg, probe=fake_probe)
+        os.rename(self.lib, self.lib + "-gone")
+        w.scan(self.c, [self.lib], self.cfg, probe=fake_probe)
+        self.assertIsNotNone(rx_db.get_file(self.c, os.path.join(self.lib, "Show/Season 1/e1.mkv")))
+        os.rename(self.lib + "-gone", self.lib)
+
+    def test_check_every_episode_off_skips_the_check(self):
+        run = FakeFfmpeg()
+        w.scan(self.c, [self.lib], self.cfg, probe=fake_probe)
+        cfg = dict(self.cfg, mode="report", check_every_episode=False)
+        w.process(self.c, rx_db.next_file(self.c), cfg, run, probe=fake_probe)
+        before = len(run.cmds)
+        w.process(self.c, rx_db.next_file(self.c), cfg, run, probe=fake_probe)
+        self.assertEqual(len(run.cmds), before)  # second episode: folder quality reused, no sample at all
+
     def test_scan(self):
         n = w.scan(self.c, [self.lib], self.cfg, probe=fake_probe)
         self.assertEqual(n, 3)

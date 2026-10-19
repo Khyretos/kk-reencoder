@@ -39,6 +39,7 @@ class Worker:
         self.blocked: Optional[str] = None
         self.scanning: bool = False
         self._stop = threading.Event()
+        self._scan_now = threading.Event()
         self._scan_thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
@@ -130,6 +131,10 @@ class Worker:
             )
             t.start()
 
+    def request_scan(self) -> None:
+        """Signal an immediate scan."""
+        self._scan_now.set()
+
     def _start_scan_thread(self) -> None:
         """Start the background scan thread."""
         if self._scan_thread is None or not self._scan_thread.is_alive():
@@ -141,12 +146,15 @@ class Worker:
         while not self._stop.is_set():
             self.scanning = True
             try:
+                self._scan_now.clear()
                 self.scan(self.conn, self.cfg["roots"], self.cfg, probe=self.probe)
+                rx_db.set_state(self.conn, "last_scan", time.strftime("%Y-%m-%dT%H:%M:%SZ"))
             except Exception:
                 traceback.print_exc()
             finally:
                 self.scanning = False
-            if not self.cfg.get("rescan_s") or self._stop.wait(self.cfg["rescan_s"]):
+            self._scan_now.wait(self.cfg.get("rescan_s", 3600))
+            if self._stop.is_set():
                 return
 
     def _worker_thread(self, conn: Any, f: Dict[str, Any], cfg: Dict[str, Any], run, probe) -> None:

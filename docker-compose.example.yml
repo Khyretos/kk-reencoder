@@ -40,9 +40,10 @@ services:
       - RX_SAMPLES=3              # samples per file for the quality search
       - RX_SAMPLE_LEN=20          # seconds per sample
       - RX_SEARCH_PER_FOLDER=2    # full searches per series; later episodes reuse that quality with one check sample
+      - RX_CHECK_EVERY_EPISODE=true   # false: skip that check sample too (mostly GPU work); also on the Settings screen
       # --- space and housekeeping ---
       - RX_MAX_STAGED_GB=1000     # pause when re-encodes waiting for Confirm plus kept originals exceed this
-      - RX_RESCAN_S=21600         # rescan the library every 6 hours (in the background)
+      - RX_RESCAN_S=86400         # rescan the library once a day (in the background); also on the Settings screen
       - TZ=Europe/Amsterdam
     mem_limit: 3g                 # keep the encoder polite next to your other services
     cpus: 4

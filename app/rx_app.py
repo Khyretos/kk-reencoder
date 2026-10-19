@@ -18,6 +18,7 @@ import rx_config
 import rx_db
 import rx_model
 import rx_scan
+import rx_settings
 import rx_stage
 import rx_sys
 import rx_worker
@@ -44,16 +45,19 @@ class App:
         self.worker = worker
         self.sampler = sampler if sampler is not None else rx_sys.Sampler()
 
+
     def status(self) -> Dict[str, Any]:
         """Return current application status."""
         paused = rx_db.get_state(self.conn, "paused", "0") == "1"
         jobs = []
         blocked = None
         scanning = False
+        last_scan = ""
         if self.worker:
             jobs = self.worker.jobs_list()
             blocked = self.worker.blocked
             scanning = getattr(self.worker, 'scanning', False)
+        last_scan = rx_db.get_state(self.conn, "last_scan", "")
 
         # a job's ffmpeg processes name either the file itself or the job's own work folder
         keys = {j["path"]: [j["path"], hashlib.sha1(j["path"].encode()).hexdigest()[:12]] for j in jobs}
@@ -78,7 +82,16 @@ class App:
             "sys": sys_info,
             "parallel": max(1, min(5, int(rx_db.get_state(self.conn, "parallel", str(self.cfg.get("parallel", 2)))))),
             "totals": self.totals(),
+            "last_scan": last_scan,
         }
+
+    def settings(self) -> Dict[str, Any]:
+        """The settings the page can change, as the service uses them now."""
+        return rx_settings.current(self.cfg)
+
+    def set_settings(self, changes: Dict[str, Any]) -> Dict[str, Any]:
+        """Check, store and apply changed settings (ValueError on a bad value; nothing applied then)."""
+        return rx_settings.save(self.conn, self.cfg, changes)
 
     TOTAL_KEYS = ("files", "pending", "encoded", "predicted", "staged", "confirmed", "skipped", "failed",
                   "original_bytes", "current_bytes", "projected_bytes", "extra_bytes")
@@ -162,11 +175,20 @@ class App:
             n += 1
         return {"updated": n}
 
-    def rescan(self) -> None:
+    def rescan(self, library: Optional[str] = None, folder: Optional[str] = None) -> Dict[str, bool]:
         """Start a background scan."""
-        t = threading.Thread(target=rx_scan.scan, args=(self.conn, self.cfg["roots"], self.cfg))
-        t.daemon = True
-        t.start()
+        if self.worker:
+            if folder is not None:
+                self.worker.scan_folder(library, folder)
+            else:
+                self.worker.request_scan()
+        else:
+            only = (library, folder) if folder else None
+            t = threading.Thread(target=rx_scan.scan, args=(self.conn, self.cfg["roots"], self.cfg),
+                                 kwargs={"only": only})
+            t.daemon = True
+            t.start()
+        return {"started": True}
 
     ACTIONS = {
         # action: (status it needs, rx_stage step, status afterwards)

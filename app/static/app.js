@@ -419,9 +419,24 @@
             }
             return hit.el;
         });
-        const now = els.folders.children;
-        const same = now.length === wanted.length && wanted.every((el, i) => now[i] === el);
-        if (!same) els.folders.replaceChildren(...wanted);
+        
+        // Preserve scroll position by replacing only rebuilt cards in place when order is unchanged
+        const prevKeys = state.lastKeys || [];
+        const keysChanged = JSON.stringify(prevKeys) !== JSON.stringify(finalKeys);
+        if (!keysChanged) {
+            // Order is the same: replace only the rebuilt elements at their original positions
+            finalKeys.forEach((key, i) => {
+                const oldEl = els.folders.children[i];
+                const newEl = wanted[i];
+                if (oldEl !== newEl) {
+                    oldEl.replaceWith(newEl);
+                }
+            });
+        } else {
+            // Keys or order changed: rebuild the whole list
+            els.folders.replaceChildren(...wanted);
+        }
+        state.lastKeys = finalKeys;
     }
 
     function createFolderElement(folder, key) {
@@ -483,6 +498,13 @@
         pauseBtn.textContent = folder.paused ? 'Resume' : 'Pause';
         pauseBtn.onclick = () => toggleFolderPause(folder.library, folder.name);
 
+        const rescanBtn = document.createElement('button');
+        rescanBtn.className = 'btn btn-rescan';
+        rescanBtn.textContent = 'Rescan';
+        rescanBtn.title = 'Look for new or changed episodes in this series';
+        rescanBtn.dataset.library = folder.library;
+        rescanBtn.dataset.folder = folder.name;
+
         // Encode button for manual mode
         if (state.mode === 'manual') {
             const encodeBtn = document.createElement('button');
@@ -494,6 +516,7 @@
 
         btnGroup.appendChild(prioBtn);
         btnGroup.appendChild(pauseBtn);
+        btnGroup.appendChild(rescanBtn);
         header.appendChild(btnGroup);
 
         // Body
@@ -734,7 +757,6 @@
             const label = folders === 1 ? `${folders} series · 1 file` : `${folders} series · ${folders} files`;
             return label;
         });
-
     }
 
     // --- Utilities ---

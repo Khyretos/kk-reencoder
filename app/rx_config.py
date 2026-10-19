@@ -121,6 +121,8 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     skip_hdr = parse_bool(env.get("RX_SKIP_HDR", "true"), True)
     # QSV only: decode and convert on the GPU as well (falls back to CPU decode per file when it fails)
     hw_decode = parse_bool(env.get("RX_HW_DECODE", "true"), True)
+    # off: once a series has its quality, later episodes skip the CPU check sample (mostly GPU work then)
+    check_every_episode = parse_bool(env.get("RX_CHECK_EVERY_EPISODE", "true"), True)
 
     # Parse max_height
     max_height = parse_int(env.get("RX_MAX_HEIGHT", "2160"), 2160, 360, 8192)
@@ -155,7 +157,7 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     idle_s = parse_int(env.get("RX_IDLE_S", "10"), 10, 1, 3600)
 
     # Parse rescan_s
-    rescan_s = parse_int(env.get("RX_RESCAN_S", "21600"), 21600, 60, 86400)
+    rescan_s = parse_int(env.get("RX_RESCAN_S", "86400"), 86400, 3600, 604800)  # default: once a day
 
     return {
         "roots": roots,
@@ -173,6 +175,7 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         "search_per_folder": search_per_folder,
         "parallel": parallel,
         "hw_decode": hw_decode,
+        "check_every_episode": check_every_episode,
         "filters": filters,
         "codecs": codecs,
         "skip_hdr": skip_hdr,

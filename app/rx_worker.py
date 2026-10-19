@@ -143,13 +143,18 @@ def process(conn, f, cfg, run, probe=None, progress=None):
     if progress is not None:
         progress["phase"] = "checking"
     q = folder_quality(conn, lib, folder, cfg)
-    if q is not None:
+    if q is not None and cfg.get("check_every_episode", True):
         vmaf, ratio, worst = check_quality(path, info, q, cfg, run, lib)
         # Keep q only if it meets target criteria
         if vmaf >= cfg["target_vmaf"] - 1 and ratio <= cfg["max_ratio"]:
             pass  # keep q
         else:
             q = None
+    elif q is not None:
+        # Folder has a quality but check_every_episode is False; use it directly
+        vmaf = None
+        ratio = q.get("ratio") if isinstance(q, dict) else cfg.get("max_ratio")
+        worst = []
 
     if q is None:
         if progress is not None:

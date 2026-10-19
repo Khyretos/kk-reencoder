@@ -205,6 +205,22 @@ class Api(unittest.TestCase):
     def test_mode_manual_allowed(self):
         self.assertEqual(server.config_from_env({"RX_ROOTS": "/a", "RX_MODE": "manual"})["mode"], "manual")
 
+    def test_settings_api(self):
+        v = json.loads(self.get("/api/settings")[2])
+        self.assertEqual(v["mode"], "report")
+        r = self.post("/api/settings", {"target_vmaf": 96})
+        self.assertEqual(r["target_vmaf"], 96.0)
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            self.post("/api/settings", {"mode": "nope"})
+        self.assertEqual(e.exception.code, 400)
+        self.post("/api/settings", {"target_vmaf": 95})
+
+    def test_scan_api(self):
+        self.assertTrue(self.post("/api/scan", {})["started"])
+        self.assertTrue(self.post("/api/scan", {"library": "Anime", "folder": "Show"})["started"])
+        s = json.loads(self.get("/api/status")[2])
+        self.assertIn("last_scan", s)
+
     def test_unknown_is_404(self):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.get("/nope")

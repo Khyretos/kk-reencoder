@@ -21,6 +21,7 @@ import rx_db
 import rx_stage
 import rx_pool
 import rx_sys as rx_sys
+import rx_settings
 
 
 def make_server(app, host, port):
@@ -147,6 +148,10 @@ def make_server(app, host, port):
                 return
 
             # API Routes
+            if path == "/api/settings":
+                self._send_json(200, app.settings())
+                return
+
             if path == "/api/status":
                 try:
                     result = app.status()
@@ -338,9 +343,23 @@ def make_server(app, host, port):
                     self._send_json(500, {"error": str(e)})
                 return
 
+            if path == "/api/settings":
+                if self.command == "GET":
+                    self._send_json(200, app.settings())
+                else:
+                    try:
+                        if not isinstance(data, dict):
+                            raise ValueError("expected a JSON object")
+                        self._send_json(200, app.set_settings(data))
+                    except ValueError as e:
+                        self._send_json(400, {"error": str(e)})
+                return
+
             if path == "/api/scan":
+                library = data.get("library")
+                folder = data.get("folder")
                 try:
-                    result = app.rescan()
+                    result = app.rescan(library, folder)
                     self._send_json(200, result)
                 except KeyError:
                     self._send_json(404, {"error": "Not Found"})
@@ -363,6 +382,7 @@ def main():
     os.makedirs(os.path.dirname(cfg["db"]) or ".", exist_ok=True)
 
     conn = rx_db.connect(cfg["db"])
+    rx_settings.load(conn, cfg)
     worker = rx_pool.Worker(conn, cfg)
     worker.start()
 
