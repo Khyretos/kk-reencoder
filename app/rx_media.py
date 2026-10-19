@@ -297,7 +297,8 @@ def filter_args(name: Optional[str]) -> List[str]:
     return ["-vf", FILTERS[name]]
 
 
-def encode_cmd(src: str, dst: str, encoder: str, q: int, device: Optional[str], video_index: int, filter: Optional[str] = None) -> List[str]:
+def encode_cmd(src: str, dst: str, encoder: str, q: int, device: Optional[str], video_index: int, filter: Optional[str] = None,
+               hw_decode: bool = False) -> List[str]:
     """Build full encoding command preserving all streams.
 
     Args:
@@ -317,8 +318,12 @@ def encode_cmd(src: str, dst: str, encoder: str, q: int, device: Optional[str], 
     if encoder in ("qsv", "vaapi"):
         args.extend(hw_init_args(encoder, device))
     
+    # qsv without a CPU filter: decode, 10-bit conversion and encode all on the GPU (about 5x faster)
+    gpu_path = hw_decode and encoder == "qsv" and not filter
+    if gpu_path:
+        args.extend(["-hwaccel", "qsv", "-hwaccel_output_format", "qsv"])
     args.extend(["-i", src])
-    
+
     # Map video stream
     args.extend(["-map", f"0:v:{video_index}"])
     
@@ -339,6 +344,10 @@ def encode_cmd(src: str, dst: str, encoder: str, q: int, device: Optional[str], 
     
     # Add encoder-specific arguments
     enc_args = with_filter(encoder_args(encoder, q, device), filter)
+    if gpu_path:
+        # frames stay in GPU memory: convert with vpp_qsv instead of a CPU pixel format
+        i = enc_args.index("-pix_fmt")
+        enc_args = enc_args[:i] + ["-vf", "vpp_qsv=format=p010"] + enc_args[i + 2:]
     # Replace -c:v with -c:v:0 and adjust pix_fmt/vf if present
     new_enc_args = []
     for arg in enc_args:

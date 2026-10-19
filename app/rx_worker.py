@@ -194,9 +194,13 @@ def process(conn, f, cfg, run, probe=None, progress=None):
             info.get("video_index", 0), cfg.get("filters", {}).get(lib)
         )
 
+        block = []  # ffmpeg -progress prints key=value lines and ends each block with progress=...
+
         def on_line(line):
-            if progress is not None:
-                p = rx_model.parse_progress([line], info["duration_s"])
+            block.append(line)
+            if progress is not None and line.startswith("progress="):
+                p = rx_model.parse_progress(block, info["duration_s"])
+                block.clear()
                 if p:
                     progress.update({
                         "phase": "encoding",
@@ -205,7 +209,13 @@ def process(conn, f, cfg, run, probe=None, progress=None):
                         "eta_s": p["eta_s"]
                     })
 
-        rc, out, err = run(cmd, on_line=on_line)
+        # first try the full-GPU path; files the GPU cannot decode (10-bit H.264, old codecs) fall back to the CPU decode
+        gpu_cmd = rx_media.encode_cmd(path, part, cfg["encoder"], q, cfg["device"], info.get("video_index", 0),
+                                      cfg.get("filters", {}).get(lib), hw_decode=cfg.get("hw_decode", True))
+        rc, out, err = run(gpu_cmd, on_line=on_line)
+        if rc != 0 and gpu_cmd != cmd:
+            block.clear()
+            rc, out, err = run(cmd, on_line=on_line)
         if rc != 0:
             rx_db.set_result(conn, f["path"], status="failed", error=err[-500:] if err else "encode failed")
             if os.path.exists(part):

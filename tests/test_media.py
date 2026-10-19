@@ -109,6 +109,16 @@ class Commands(unittest.TestCase):
             self.assertIn(part, joined)
         self.assertEqual(c[-1], "/w/a.mkv")
 
+    def test_full_gpu_path(self):
+        c = x.encode_cmd("/m/a.mkv", "/w/a.mkv", "qsv", 24, "/dev/dri/renderD128", 0, None, hw_decode=True)
+        self.assertLess(c.index("-hwaccel"), c.index("-i"))
+        self.assertEqual(c[c.index("-hwaccel_output_format") + 1], "qsv")
+        self.assertEqual(c[c.index("-vf") + 1], "vpp_qsv=format=p010")
+        self.assertNotIn("-pix_fmt:v:0", c)
+        # a CPU filter (deband) or another encoder keeps the CPU path
+        self.assertNotIn("-hwaccel", x.encode_cmd("/m/a.mkv", "/w/a.mkv", "qsv", 24, "/dev/dri/renderD128", 0, "deband", hw_decode=True))
+        self.assertNotIn("-hwaccel", x.encode_cmd("/m/a.mkv", "/w/a.mkv", "svt", 24, None, 0, None, hw_decode=True))
+
     def test_full_encode_cmd_mp4_no_attachments(self):
         c = " ".join(x.encode_cmd("/m/a.mp4", "/w/a.mp4", "svt", 30, None, 0))
         self.assertNotIn("0:t?", c)
