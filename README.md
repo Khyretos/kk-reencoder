@@ -61,6 +61,7 @@ Optional deband filter per library via `RX_FILTERS` (default: none). It runs on 
 | `RX_TARGET_VMAF` | `95` | Target VMAF score. |
 | `RX_MAX_RATIO` | `0.8` | Max output size ratio (0.8 = 80%). |
 | `RX_PARALLEL` | `2` | Number of concurrent encodes (1-5). |
+| `RX_HW_DECODE` | `true` | QSV only: decode and 10-bit conversion on the GPU too (about 5x faster); falls back to CPU decode per file. |
 | `RX_FILTERS` | (none) | Optional CPU filters per library, e.g. `Anime=deband`. |
 | `RX_MAX_STAGED_GB` | `1000` | Pause staging if total exceeds this. |
 | `RX_VMAF_THREADS` | `4` | Threads for VMAF analysis. |
@@ -72,7 +73,7 @@ Optional deband filter per library via `RX_FILTERS` (default: none). It runs on 
 
 ## Quick Start
 
-Create a `docker-compose.yml`:
+Copy `docker-compose.example.yml` to `docker-compose.yml`, adjust the lines marked ADJUST (media folders, user, GPU) and run `docker compose up -d`. Every setting is listed in that file with a short explanation. A minimal version:
 
 ```yaml
 version: "3"

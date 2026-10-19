@@ -24,6 +24,8 @@ class Config(unittest.TestCase):
         self.assertEqual(c["samples"], 3)
         self.assertEqual(c["parallel"], 2)
         self.assertEqual(c["filters"], {})
+        self.assertTrue(c["hw_decode"])
+        self.assertFalse(server.config_from_env({"RX_ROOTS": "/a", "RX_HW_DECODE": "false"})["hw_decode"])
         self.assertEqual(server.config_from_env({"RX_ROOTS": "/a", "RX_FILTERS": "Anime=deband, Movies=none"})["filters"], {"Anime": "deband"})
         self.assertEqual(c["min_kbps"]["1080"], 2500)
         self.assertTrue(c["skip_hdr"])

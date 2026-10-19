@@ -119,6 +119,8 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
 
     # Parse skip_hdr
     skip_hdr = parse_bool(env.get("RX_SKIP_HDR", "true"), True)
+    # QSV only: decode and convert on the GPU as well (falls back to CPU decode per file when it fails)
+    hw_decode = parse_bool(env.get("RX_HW_DECODE", "true"), True)
 
     # Parse max_height
     max_height = parse_int(env.get("RX_MAX_HEIGHT", "2160"), 2160, 360, 8192)
@@ -170,6 +172,7 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         "vmaf_threads": vmaf_threads,
         "search_per_folder": search_per_folder,
         "parallel": parallel,
+        "hw_decode": hw_decode,
         "filters": filters,
         "codecs": codecs,
         "skip_hdr": skip_hdr,
