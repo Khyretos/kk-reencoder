@@ -28,10 +28,13 @@ The screenshots come from a real library. `docs/screenshots/shoot.mjs` takes the
 - **VMAF-proven quality** per file; nothing replaces the original without confirmation.
 - **Modes**: report (measure only), manual (tick series to encode), stage (encode next to original).
 - **Batch control**: pause, priorities, 1-5 encodes at once.
+- **Queue**: see which series are encoded or measured next; drag to reorder (mouse or finger), send one to the front, take it out and put it back.
+- **Settings screen**: mode (report, manual, automatic), encodes at once, daily rescan, quality target and size limit, without editing the compose file.
 - **Staged copies** in a hidden `.reencoder` folder; Compare, Confirm, Undo, Finalize steps.
 - **Safety**: originals are never deleted before Finalize; space guard (`RX_MAX_STAGED_GB`).
 - **Reports**: `encoding_report.json` per series; overview with charts; live CPU/memory per job.
-- **Scans** in the background; works on phones, dark and light themes.
+- **Scans** in the background (daily, per library or per series); works on phones, dark and light themes.
+- **Glance or detail**: every panel folds to a one-line summary of its numbers; cards and rows are coloured by state (done, ready to confirm, partly done, queued, running, skipped).
 
 ## How it works
 
