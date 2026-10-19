@@ -64,6 +64,13 @@ class App(unittest.TestCase):
         self.assertEqual(s["sys"]["cpu_pct"], 150.0)
         self.assertEqual(s["parallel"], 2)
 
+    def test_estimate_extrapolates_from_measured_files(self):
+        # Show/0 measured: 1000 -> 400 (ratio 0.4); Show/1 pending is estimated at that ratio; Film is skipped
+        t = self.app.status()["totals"]
+        self.assertEqual(t["measured_files"], 1)
+        self.assertEqual(t["estimated_bytes"], 400 + 400 + 1000)
+        self.assertEqual(t["estimated_saved_bytes"], 3000 - 1800)
+
     def test_overview(self):
         o = self.app.overview()
         self.assertEqual(o["codecs"]["before"], {"h264": 2000, "av1": 1000})

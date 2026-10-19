@@ -91,7 +91,36 @@ class App:
                 t[k] += f.get(k) or 0
         t["saved_bytes"] = t["original_bytes"] - t["current_bytes"] - t["extra_bytes"]
         t["projected_saved_bytes"] = t["original_bytes"] - t["projected_bytes"]
+        t.update(self.estimate())
         return t
+
+    def estimate(self) -> Dict[str, Any]:
+        """Whole-library estimate: files still waiting for a measurement are expected to shrink like the
+        files already measured in the same library (or the whole library when that library has none)."""
+        rows = self.conn.execute("""
+            SELECT library,
+                   SUM(CASE WHEN status IN ('predicted', 'staged', 'confirmed', 'encoded') AND new_bytes IS NOT NULL
+                            THEN size ELSE 0 END) AS m_size,
+                   SUM(CASE WHEN status IN ('predicted', 'staged', 'confirmed', 'encoded') AND new_bytes IS NOT NULL
+                            THEN new_bytes ELSE 0 END) AS m_new,
+                   SUM(CASE WHEN status IN ('predicted', 'staged', 'confirmed', 'encoded') AND new_bytes IS NOT NULL
+                            THEN 1 ELSE 0 END) AS m_files,
+                   SUM(CASE WHEN status IN ('pending', 'running') THEN size ELSE 0 END) AS waiting,
+                   SUM(CASE WHEN status NOT IN ('predicted', 'staged', 'confirmed', 'encoded', 'pending', 'running')
+                              OR (status IN ('predicted', 'staged', 'confirmed', 'encoded') AND new_bytes IS NULL)
+                            THEN size ELSE 0 END) AS stays
+            FROM files GROUP BY library""").fetchall()
+        all_size = sum(r["m_size"] or 0 for r in rows)
+        all_new = sum(r["m_new"] or 0 for r in rows)
+        overall = all_new / all_size if all_size else 1.0
+        estimated = 0
+        original = 0
+        for r in rows:
+            ratio = (r["m_new"] / r["m_size"]) if r["m_size"] else overall
+            estimated += (r["m_new"] or 0) + int((r["waiting"] or 0) * ratio) + (r["stays"] or 0)
+            original += (r["m_size"] or 0) + (r["waiting"] or 0) + (r["stays"] or 0)
+        return {"measured_files": sum(r["m_files"] or 0 for r in rows), "estimated_bytes": estimated,
+                "estimated_saved_bytes": original - estimated}
 
     def folders(self) -> List[Dict[str, Any]]:
         """Return list of folder summaries."""

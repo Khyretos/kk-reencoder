@@ -236,32 +236,30 @@
 
     function updateTiles(totals) {
         const fmtBytes = (b) => formatBytes(b || 0);
-        const fmtPct = (p) => p ? Math.round(p) + '%' : '-';
+        const pct = (part, whole) => {
+            if (!whole || !part) return '0%';
+            const p = part / whole * 100;
+            return (p < 1 ? p.toFixed(2) : Math.round(p)) + '%';
+        };
+        const orig = totals.original_bytes || 0;
 
-        // Library size (original_bytes)
-        els.tiles[0].dataset.val = fmtBytes(totals.original_bytes);
-        els.tiles[0].dataset.sub = totals.files + ' files';
+        // Original library: what the library weighed before any re-encode
+        els.tiles[0].dataset.val = fmtBytes(orig);
+        els.tiles[0].dataset.sub = `${(totals.files || 0).toLocaleString()} files`;
 
-        // Size now (current_bytes + extra_bytes)
-        const nowBytes = totals.current_bytes + totals.extra_bytes;
-        els.tiles[1].dataset.val = fmtBytes(nowBytes);
-        els.tiles[1].dataset.sub = totals.extra_bytes > 0 ? `+${formatBytes(totals.extra_bytes)} waiting for confirm` : '';
+        // On disk now: files in place plus copies waiting for Confirm / kept originals
+        const extra = totals.extra_bytes || 0;
+        els.tiles[1].dataset.val = fmtBytes((totals.current_bytes || 0) + extra);
+        els.tiles[1].dataset.sub = extra > 0 ? `incl. ${formatBytes(extra)} waiting for confirm` : 'no copies waiting';
 
-        // Saved so far (saved_bytes)
-        els.tiles[2].dataset.val = fmtBytes(totals.saved_bytes);
-        const savedPct = totals.original_bytes > 0 ? (totals.saved_bytes / totals.original_bytes * 100) : 0;
-        els.tiles[2].dataset.sub = fmtPct(savedPct);
+        // Saved so far: only what Finalize really freed
+        els.tiles[2].dataset.val = fmtBytes(Math.max(0, totals.saved_bytes || 0));
+        els.tiles[2].dataset.sub = `${pct(Math.max(0, totals.saved_bytes || 0), orig)} of the library`;
 
-        // Projected (projected_bytes)
-        els.tiles[3].dataset.val = fmtBytes(totals.projected_bytes);
-        const projSaved = totals.projected_bytes > 0 && totals.original_bytes > 0 
-            ? ((totals.original_bytes - totals.projected_bytes) / totals.original_bytes * 100) 
-            : 0;
-        els.tiles[3].dataset.sub = `saves ${Math.round(projSaved)}%`;
-        
-        if (state.mode === 'report') {
-            els.tiles[3].dataset.sub += ' · estimate';
-        }
+        // Expected when done: measured files plus the rest estimated from them
+        const est = totals.estimated_bytes != null ? totals.estimated_bytes : totals.projected_bytes;
+        els.tiles[3].dataset.val = fmtBytes(est);
+        els.tiles[3].dataset.sub = `saves ${formatBytes(Math.max(0, orig - est))} (${pct(Math.max(0, orig - est), orig)}) · estimate from ${(totals.measured_files || 0).toLocaleString()} measured files`;
         els.tiles.forEach(tile => {
             const v = tile.querySelector('.tile-value');
             const sub = tile.querySelector('.tile-sub');
