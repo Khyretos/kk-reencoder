@@ -1099,3 +1099,25 @@ button.btn-encode { white-space: nowrap; }
 #encode-selected[disabled] { opacity: .5; cursor: default; }
 @media (prefers-color-scheme: light) { .folder.marked { box-shadow: 0 0 0 1px #8a5a00, 0 0 18px rgba(138,90,0,.18); } }
 button.btn[disabled] { opacity: .45; cursor: default; }
+
+/* pick checkbox: a round toggle floating top right at title height, above everything in the card */
+.folder { position: relative; }
+.folder input.pick {
+  position: absolute; top: 12px; right: 12px; z-index: 5; margin: 0;
+  appearance: none; -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid #f3941f; background: rgba(12,9,23,.6); cursor: pointer;
+  display: grid; place-content: center; transition: background .15s, box-shadow .15s;
+}
+.folder input.pick::after { content: ""; width: 10px; height: 6px; border: 2px solid #1c1329; border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px, -1px); opacity: 0; }
+.folder input.pick:checked { background: #f3941f; box-shadow: 0 0 10px rgba(243,148,31,.6); }
+.folder input.pick:checked::after { opacity: 1; }
+.folder input.pick:hover { box-shadow: 0 0 0 4px rgba(243,148,31,.18); }
+.folder input.pick:focus-visible { outline: 2px solid #f3941f; outline-offset: 2px; }
+.folder:has(input.pick) span.folder-name { padding-right: 30px; }
+/* list view: the toggle sits at the start of the row instead */
+#folders.list .folder input.pick { position: static; flex: 0 0 auto; }
+#folders.list .folder:has(input.pick) span.folder-name { padding-right: 0; }
+@media (prefers-color-scheme: light) {
+  .folder input.pick { border-color: #8a5a00; background: #fff; }
+  .folder input.pick:checked { background: #f3941f; }
+}
