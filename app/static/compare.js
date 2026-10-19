@@ -5,7 +5,16 @@
 'use strict';
 
 window.KKCompare = {
+  gen: 0,
+  // empty and hide the viewer; a frames request still on its way is dropped (see gen)
+  reset: function (el) {
+    this.gen++;
+    if (!el) return;
+    el.hidden = true;
+    el.textContent = '';
+  },
   show: async function (el, path) {
+    const gen = ++this.gen;
     el.removeAttribute('hidden');
     el.textContent = '';
 
@@ -14,6 +23,7 @@ window.KKCompare = {
       const r = await fetch('/api/frames?path=' + encodeURIComponent(path), { cache: 'no-store' });
       if (r.ok) pairs = (await r.json()).pairs || [];
     } catch (e) { /* shown as "no frames" below */ }
+    if (gen !== this.gen) return;  // closed, or another file was picked meanwhile
 
     const bar = document.createElement('div');
     bar.className = 'cmp-bar';

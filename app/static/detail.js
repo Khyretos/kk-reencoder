@@ -15,19 +15,33 @@ window.KKDetail = {
     
     document.getElementById('detail-title').textContent = folder.split('/').pop();
     const dlg = document.getElementById('detail');
+    // start fresh every time: no comparison, rows or buttons left over from the previous series
+    this.clear();
     if (!dlg.open) dlg.showModal();
+    dlg.scrollTop = 0;
     if (!this.wired) {
       this.wired = true;
       document.getElementById('detail-close').addEventListener('click', () => dlg.close());
+      dlg.addEventListener('close', () => this.clear());  // close button, Escape or a click outside
     }
-    this.fetchReport();
+    this.token = (this.token || 0) + 1;
+    this.fetchReport(this.token);
   },
 
-  fetchReport: async function() {
+  clear: function() {
+    if (window.KKCompare) window.KKCompare.reset(document.getElementById('compare'));
+    ['detail-body', 'detail-actions'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '';
+    });
+  },
+
+  fetchReport: async function(token) {
     try {
       const res = await fetch('/api/report?library=' + encodeURIComponent(this.library) + '&folder=' + encodeURIComponent(this.folder));
       if (!res.ok) throw new Error('Failed to fetch report');
       const data = await res.json();
+      if (token !== undefined && token !== this.token) return;  // another series was opened meanwhile
       this.render(data);
     } catch (e) {
       console.error(e);
@@ -185,6 +199,13 @@ window.KKDetail = {
           }
         };
         tdActions.appendChild(finalizeBtn);
+      } else if (file.status === 'encoded' && file.codec_after) {
+        // done: the comparison frames are kept, so the result can still be looked at
+        const compareBtn = document.createElement('button');
+        compareBtn.className = 'btn btn-small';
+        compareBtn.textContent = 'Compare';
+        compareBtn.onclick = () => window.KKCompare.show(document.getElementById('compare'), file.path);
+        tdActions.appendChild(compareBtn);
       }
       tr.appendChild(tdActions);
       tbody.appendChild(tr);
