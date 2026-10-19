@@ -1284,3 +1284,13 @@ ul.q-list .q-row { grid-template-columns: minmax(0, 1fr) auto; }
   .q-name, .q-meta { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
   .q-row { gap: 8px; padding: 8px; }
 }
+/* queue panel folds from its header */
+#queue .q-head { margin: 0; }
+.q-toggle { all: unset; box-sizing: border-box; display: flex; align-items: baseline; gap: 10px; width: 100%; cursor: pointer; font: inherit; color: inherit; padding: 2px 0; }
+.q-toggle:focus-visible { outline: 2px solid #f3941f; outline-offset: 4px; border-radius: 6px; }
+.q-chev { display: inline-block; color: #f3941f; transition: transform .15s ease; }
+#queue:not(.q-closed) .q-chev { transform: rotate(90deg); }
+.q-sum { font-size: .8rem; font-weight: 400; color: var(--kk-muted-dark); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-hint { margin: 6px 0 0; }
+#queue.q-closed .q-groups, #queue.q-closed .q-hint { display: none; }
+@media (prefers-color-scheme: light) { .q-sum { color: var(--kk-muted-light); } .q-chev { color: #8a5a00; } .q-toggle:focus-visible { outline-color: #8a5a00; } }

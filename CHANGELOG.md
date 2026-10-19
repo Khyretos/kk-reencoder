@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Queue panel: see which series are encoded or measured next, drag to reorder (mouse or finger), ↑ to send one to the front, ✕ to take it out, and put it back from "Taken out".
+- Queue panel: see which series are encoded or measured next, drag to reorder (mouse or finger), ↑ to send one to the front, ✕ to take it out, and put it back from "Taken out". The panel folds from its header and remembers that per browser.
 
 ## 0.1.0 (2026-10-19)
 

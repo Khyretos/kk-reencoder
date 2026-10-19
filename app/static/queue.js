@@ -29,14 +29,34 @@
   function build() {
     const sec = h('section', 'card');
     sec.id = 'queue';
-    const head = h('h2', null, 'Queue ');
-    head.append(h('span', 'hint', 'Drag a row by its grip, press ↑ to send it to the front, ✕ to take it out'));
-    sec.append(head, h('div', 'q-groups'));
+    // the header folds the panel; collapsed it shows one summary line (remembered per browser)
+    const head = h('h2', 'q-head');
+    const tog = h('button', 'q-toggle');
+    tog.type = 'button';
+    tog.append(h('span', 'q-chev', '▸'), h('span', null, 'Queue'), h('span', 'q-sum'));
+    tog.addEventListener('click', () => setOpen(sec.classList.contains('q-closed')));
+    head.append(tog);
+    const body = h('div', 'q-groups');
+    body.id = 'queue-body';
+    tog.setAttribute('aria-controls', body.id);
+    const hint = h('p', 'hint q-hint', 'Drag a row by its grip, press ↑ to send it to the front, ✕ to take it out');
+    sec.append(head, hint, body);
     const jobs = document.getElementById('jobs');
     (jobs || document.getElementById('folders')).after(sec);
     sec.addEventListener('click', onClick);
     sec.addEventListener('pointerdown', onDown);
     return sec;
+  }
+
+  function isOpen() {
+    try { return localStorage.getItem('rx-queue-open') !== '0'; } catch (e) { return true; }
+  }
+  function setOpen(open) {
+    const sec = document.getElementById('queue');
+    if (!sec) return;
+    sec.classList.toggle('q-closed', !open);
+    sec.querySelector('.q-toggle').setAttribute('aria-expanded', String(open));
+    try { localStorage.setItem('rx-queue-open', open ? '1' : '0'); } catch (e) { /* not remembered */ }
   }
 
   function row(it, n) {
@@ -85,10 +105,14 @@
 
   function paint() {
     if (!latest || dragging) return;
-    const sec = document.getElementById('queue') || build();
+    let sec = document.getElementById('queue');
+    if (!sec) { sec = build(); setOpen(isOpen()); }
     const enc = latest.items.filter(i => i.action === 'encode');
     const mea = latest.items.filter(i => i.action === 'measure');
     const groups = sec.querySelector('.q-groups');
+    const next = enc[0] || mea[0];
+    sec.querySelector('.q-sum').textContent = `${enc.length} to encode · ${mea.length} to measure` +
+      (latest.paused.length ? ` · ${latest.paused.length} taken out` : '') + (next ? ` · next: ${title(next.name)}` : '');
     const scroll = window.scrollY;
     groups.replaceChildren(
       group('Encoding next', null, enc, 'encode'),
