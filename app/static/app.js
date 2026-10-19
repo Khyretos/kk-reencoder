@@ -295,7 +295,7 @@
         const memStr = sys.mem_bytes !== null && sys.mem_limit !== null 
             ? `${formatBytes(sys.mem_bytes)} of ${formatBytes(sys.mem_limit)}` 
             : '-';
-        let text = `Encoder container: CPU ${cpuStr} of ${Math.round(sys.cpus)} cores · memory ${memStr}`;
+        let text = `Encoder: using ${cpuStr} of its ${Math.round(sys.cpus)}-core limit · memory ${memStr}`;
         if (state.scanning) {
             text += ' · scanning library…';
         }
@@ -338,7 +338,7 @@
             const parts = [job.phase];
             if (job.fps > 0) parts.push(Math.round(job.fps) + ' fps');
             if (typeof job.eta_s === 'number' && job.eta_s > 0) parts.push(Math.ceil(job.eta_s / 60) + ' min left');
-            if (typeof job.cpu_pct === 'number') parts.push('CPU ' + Math.round(job.cpu_pct) + '%');
+            if (typeof job.cpu_pct === 'number') parts.push((job.cpu_pct / 100).toFixed(1) + ' CPU cores');
             if (job.rss_bytes) parts.push(formatBytes(job.rss_bytes));
             const info = document.createElement('div');
             info.className = 'job-info';

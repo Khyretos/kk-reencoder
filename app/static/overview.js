@@ -268,7 +268,7 @@
             const parts = [j.phase];
             if (j.fps > 0) parts.push(Math.round(j.fps) + ' fps');
             if (typeof j.eta_s === 'number' && j.eta_s > 0) parts.push(Math.ceil(j.eta_s / 60) + ' min left');
-            if (typeof j.cpu_pct === 'number') parts.push('CPU ' + Math.round(j.cpu_pct) + '%');
+            if (typeof j.cpu_pct === 'number') parts.push((j.cpu_pct / 100).toFixed(1) + ' CPU cores');
             if (j.rss_bytes) parts.push(fmtBytes(j.rss_bytes));
             const info = document.createElement('div'); info.className = 'job-info'; info.textContent = parts.join(' · ');
             card.append(head, bar, info);

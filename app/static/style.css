@@ -1129,3 +1129,9 @@ button.btn[disabled] { opacity: .45; cursor: default; }
 #folders.list .folder input.pick { order: -1; }
 #folders.list .folder:has(input.pick) span.folder-name { flex-basis: calc(100% - 34px); }
 header.top { position: static; }
+/* never wider than the phone, also with large system text */
+#folders:not(.list) { grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); }
+.ov-grid { grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); }
+.job-head, .folder-header, .stats-row, .status-row { min-width: 0; flex-wrap: wrap; }
+.toolbar { flex-wrap: wrap; }
+.toolbar input#q { min-width: 0; flex: 1 1 10em; }
