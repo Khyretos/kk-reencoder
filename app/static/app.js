@@ -610,7 +610,8 @@
         state.viewMode = mode;
         els.viewGrid.setAttribute('aria-pressed', mode === 'grid');
         els.viewList.setAttribute('aria-pressed', mode === 'list');
-        localStorage.setItem('kk-reencoder-view', mode);
+        els.folders.classList.toggle('list', mode === 'list');
+        try { localStorage.setItem('kk-reencoder-view', mode); } catch (e) { /* private window */ }
         renderFolders();
     }
 
