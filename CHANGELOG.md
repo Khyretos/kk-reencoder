@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Deploy with `docker-compose.yml` and `.env` only: the compose file works on its own (report mode on ./media, port 127.0.0.1:8080), every setting and host path is an env var with a default (`.env.example`), and GPU and proxy network go in `docker-compose.override.example.yml`. The media owner (`RX_UID`/`RX_GID`) is a build arg and the render group is added with `group_add` (`RX_RENDER_GID`) instead of a hardcoded 993. ffmpeg is pinned to BtbN's 2026-09-30 month-end build (8.1.3) and checked by sha256. `docker-compose.example.yml` is gone.
 - Skips explained: every skipped or failed file shows why under its status (also on phones), with the measured numbers when the quality search decided ("at VMAF 95 the AV1 copy would be 93% of the original size; the size limit is 90%"). Failures keep the real ffmpeg error instead of libva start-up lines; a killed ffmpeg says it most likely ran out of memory.
 - Any real saving counts: size limit default 95% (was 80%), up to 99% on the Settings screen. The full-file check no longer throws away an encode whose samples passed: the whole file only has to come out smaller (audio is copied, so it shrinks by less than the video). Changing the target or size limit measures the files skipped as "too big" again; files skipped because of a setting (HDR, codecs, height, bitrate) are looked at again by the next scan.
 - Finalize says what it really frees: the size of the kept originals, plus the saving against before re-encoding. "Finalize all" asks once and does the whole series in one call.
