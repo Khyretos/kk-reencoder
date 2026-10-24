@@ -99,8 +99,12 @@ window.KKDetail = {
       finalizeBtn.className = 'btn';
       finalizeBtn.textContent = 'Finalize all (' + confirmedFiles.length + ')';
       finalizeBtn.onclick = () => {
-        const totalBytes = confirmedFiles.reduce((acc, f) => acc + f.new_bytes, 0);
-        if (window.confirm('Delete the ' + confirmedFiles.length + ' kept originals? This frees ' + this.formatBytes(totalBytes) + ' and cannot be undone.')) {
+        // Finalize deletes the kept originals, so what comes back is their size (the AV1 copies stay)
+        const freed = confirmedFiles.reduce((acc, f) => acc + (f.original_bytes || 0), 0);
+        const saved = confirmedFiles.reduce((acc, f) => acc + Math.max(0, (f.original_bytes || 0) - (f.new_bytes || 0)), 0);
+        if (window.confirm('Delete the ' + confirmedFiles.length + ' kept originals? This frees ' + this.formatBytes(freed) +
+            ' on the disk right now; compared with before re-encoding the series uses ' + this.formatBytes(saved) +
+            ' less. This cannot be undone.')) {
           this.bulkAction('finalize', confirmedFiles);
         }
       };
@@ -124,8 +128,15 @@ window.KKDetail = {
       const statusChip = document.createElement('td');
       const statusLabel = this.getStatusLabel(file.status);
       statusChip.className = 'st-' + file.status;
-      statusChip.title = file.reason || '';
       statusChip.textContent = statusLabel;
+      const why = this.reasonText(file);
+      if (why) {
+        // visible on phones too (a tooltip is not)
+        const small = document.createElement('div');
+        small.className = 'st-reason';
+        small.textContent = why;
+        statusChip.appendChild(small);
+      }
       tr.appendChild(statusChip);
 
       // Before
@@ -169,13 +180,13 @@ window.KKDetail = {
         const confirmBtn = document.createElement('button');
         confirmBtn.className = 'btn btn-small';
         confirmBtn.textContent = 'Confirm';
-        confirmBtn.onclick = () => this.action(file, 'confirm');
+        confirmBtn.onclick = (ev) => this.action(file, 'confirm', ev);
         tdActions.appendChild(confirmBtn);
 
         const discardBtn = document.createElement('button');
         discardBtn.className = 'btn btn-small';
         discardBtn.textContent = 'Discard';
-        discardBtn.onclick = () => this.action(file, 'discard');
+        discardBtn.onclick = (ev) => this.action(file, 'discard', ev);
         tdActions.appendChild(discardBtn);
       } else if (file.status === 'confirmed') {
         const compareBtn = document.createElement('button');
@@ -187,15 +198,18 @@ window.KKDetail = {
         const undoBtn = document.createElement('button');
         undoBtn.className = 'btn btn-small';
         undoBtn.textContent = 'Undo';
-        undoBtn.onclick = () => this.action(file, 'undo');
+        undoBtn.onclick = (ev) => this.action(file, 'undo', ev);
         tdActions.appendChild(undoBtn);
 
         const finalizeBtn = document.createElement('button');
         finalizeBtn.className = 'btn btn-small';
         finalizeBtn.textContent = 'Finalize';
-        finalizeBtn.onclick = () => {
-          if (window.confirm('Delete original?')) {
-            this.action(file, 'finalize');
+        finalizeBtn.onclick = (ev) => {
+          const saved = Math.max(0, (file.original_bytes || 0) - (file.new_bytes || 0));
+          if (window.confirm('Delete the original of ' + (file.name || '') + '? This frees ' + this.formatBytes(file.original_bytes) +
+              ' on the disk right now; compared with before re-encoding it uses ' + this.formatBytes(saved) +
+              ' less. This cannot be undone.')) {
+            this.action(file, 'finalize', ev);
           }
         };
         tdActions.appendChild(finalizeBtn);
@@ -212,6 +226,28 @@ window.KKDetail = {
     });
   },
 
+  // why a file was skipped or failed, in plain words
+  reasonText: function(file) {
+    const plain = {
+      'already AV1': 'already AV1: nothing to gain',
+      'HDR': 'HDR video: left alone because "Skip HDR" is on',
+      'codec not selected': 'its codec (' + (file.codec_before || '?') + ') is not in the list of codecs to re-encode',
+      'resolution too high': 'taller than the maximum height setting',
+      'bitrate already low': 'already a small file for its resolution: AV1 would barely save anything',
+      'unreadable': 'ffprobe could not read the file (damaged or still copying?)',
+      'no smaller encode at target quality': 'no encode reached the target quality below the size limit; changing the target or size limit in Settings tries it again',
+      'encode not smaller': 'the whole AV1 file (audio counted too) was above the size limit; changing the size limit in Settings tries it again'
+    };
+    if (file.status === 'skipped' && file.reason) return plain[file.reason] || file.reason;
+    if (file.status === 'failed') {
+      const err = (file.error || '').trim();
+      if (!err) return 'failed without a message';
+      if (err === 'stopped') return 'stopped: the quality search or encode crashed or the service restarted';
+      return err.split('\n').filter(Boolean).slice(-1)[0].slice(0, 160);
+    }
+    return '';
+  },
+
   getStatusLabel: function(status) {
     const map = {
       'pending': 'Pending',
@@ -226,8 +262,8 @@ window.KKDetail = {
     return map[status] || status;
   },
 
-  action: async function(file, action) {
-    const btn = event.target;
+  action: async function(file, action, ev) {
+    const btn = (ev || window.event).target;
     btn.disabled = true;
     btn.textContent = '...';
     
@@ -257,33 +293,21 @@ window.KKDetail = {
   },
 
   bulkAction: async function(action, files) {
-    if (action === 'finalize') {
-      if (!window.confirm('Delete originals?')) return;
-    }
-    
-    for (const file of files) {
-      try {
-        const res = await fetch('/api/folder-action', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            library: this.library, 
-            folder: this.folder, 
-            action: action 
-          })
-        });
-        
-        if (!res.ok) {
-          const data = await res.json();
-          if (data.failed && data.failed.includes(file.path)) continue;
-          throw new Error('Failed');
-        }
-      } catch (e) {
-        console.error(e);
-        break;
+    // one call does the whole series (the server walks every file in the needed state)
+    try {
+      const res = await fetch('/api/folder-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ library: this.library, folder: this.folder, action: action })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || (data.failed && data.failed.length)) {
+        alert((data.failed && data.failed.length ? data.failed.length + ' of ' + files.length + ' files failed: ' + data.failed[0].error : (data.error || 'Failed')));
       }
+    } catch (e) {
+      console.error(e);
     }
-    
     this.fetchReport();
+    if (this.onChange) this.onChange();
   }
 };

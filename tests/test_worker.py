@@ -205,7 +205,8 @@ class Worker(unittest.TestCase):
         self.assertEqual(os.path.getsize(f["path"]), 4096)
         self.assertFalse(os.path.exists(rx_stage.staged_path(f["path"])))
         got = rx_db.get_file(self.c, f["path"])
-        self.assertEqual((got["status"], got["reason"]), ("skipped", "encode not smaller"))
+        self.assertEqual(got["status"], "skipped")
+        self.assertTrue(got["reason"].startswith("the whole AV1 file came out at 2500%"), got["reason"])
 
 if __name__ == "__main__":
     unittest.main()

@@ -130,6 +130,32 @@ def skip_reason(info: Dict[str, Any], cfg: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+# skip reasons that depend on the settings (not on the file alone): a later scan looks at these files again
+SETTING_REASONS = ("HDR", "codec not selected", "resolution too high", "bitrate already low")
+# skip reasons from the quality search: a change of target VMAF or size limit puts these files back in the queue
+QUALITY_REASON_PREFIXES = ("no smaller encode", "encode not smaller", "never reached VMAF", "at VMAF",
+                           "the whole AV1 file")
+
+
+def is_quality_reason(reason: Optional[str]) -> bool:
+    """True for a skip that came from the quality search (worth trying again with other settings)."""
+    return bool(reason) and reason.startswith(QUALITY_REASON_PREFIXES)
+
+
+def search_skip_reason(trials: List[Dict[str, Any]], target: float, max_ratio: float) -> str:
+    """Why a search found nothing to keep, with the measured numbers, in words people can act on."""
+    if not trials:
+        return "no smaller encode at target quality"
+    good = [t for t in trials if t["vmaf"] >= target]
+    if not good:
+        best = max(trials, key=lambda t: t["vmaf"])
+        return (f"never reached VMAF {target:g}: best was {best['vmaf']:.1f} at the highest quality tried "
+                f"(q {best['q']})")
+    smallest = min(good, key=lambda t: t["ratio"])
+    return (f"at VMAF {target:g} the AV1 copy would be {smallest['ratio'] * 100:.0f}% of the original size; "
+            f"the size limit is {max_ratio * 100:.0f}%")
+
+
 def order_folders(folders: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Sort folders by encode flag, then priority, then name.
 

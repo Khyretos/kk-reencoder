@@ -40,14 +40,14 @@ The screenshots come from a real library. `docs/screenshots/shoot.mjs` takes the
 
 The service scans library folders in alphabetical order. It identifies series and movies by title folder; season folders are counted as part of their series.
 
-It skips files that are already AV1, HDR (by default), low-bitrate, or use unselected codecs.
+It skips files that are already AV1, HDR (by default), low-bitrate, or use unselected codecs. Every skipped or failed file shows why in the series window, with the measured numbers when the quality search decided (for example "at VMAF 95 the AV1 copy would be 97% of the original size; the size limit is 95%"). Files skipped because of a setting are looked at again by the next scan, and changing the quality target or size limit measures the "too big" ones again.
 
 For each file:
 1. It cuts 3 x 20 s samples.
 2. It makes a lossless reference.
 3. It encodes them at several quality levels.
 4. It scores them with VMAF.
-5. It picks the smallest encoding that reaches the target and is at most 80% of the original size.
+5. It picks the smallest encoding that reaches the target and is at most 95% of the original size (any saving of 5% or more counts; up to 99% on the Settings screen).
 
 After searching 2 files per series, the service reuses that quality setting with one check sample for the rest of the series.
 
@@ -81,7 +81,7 @@ services:
       - RX_HW_DECODE=true
       - RX_PARALLEL=2
       - RX_TARGET_VMAF=95
-      - RX_MAX_RATIO=0.8
+      - RX_MAX_RATIO=0.95
       - RX_FILTERS=
       - RX_SAMPLES=3
       - RX_SAMPLE_LEN=20
@@ -115,12 +115,13 @@ Notes:
 | `RX_ENCODER` | `qsv` | `qsv`, `vaapi`, `nvenc`, `svt`. |
 | `RX_DEVICE` | `/dev/dri/renderD128` | GPU device path. |
 | `RX_TARGET_VMAF` | `95` | Target VMAF score. |
-| `RX_MAX_RATIO` | `0.8` | Max output size ratio (0.8 = 80%). |
+| `RX_MAX_RATIO` | `0.95` | Max output size ratio (0.95 = keep anything that saves 5% or more; up to 0.99). |
 | `RX_PARALLEL` | `2` | Number of concurrent encodes (1-5). |
 | `RX_HW_DECODE` | `true` | QSV only: decode and 10-bit conversion on the GPU too (about 5x faster); falls back to CPU decode per file. |
 | `RX_FILTERS` | (none) | Optional CPU filters per library, e.g. `Anime=deband`. |
 | `RX_MAX_STAGED_GB` | `1000` | Pause staging if total exceeds this. |
 | `RX_VMAF_THREADS` | `4` | Threads for VMAF analysis. |
+| `RX_FFMPEG_THREADS` | `2` | Threads per ffmpeg decoder, encoder and filter graph. ffmpeg otherwise starts one per host CPU, which overloads a CPU-limited container and can run it out of memory. |
 | `RX_SAMPLES` | `3` | Number of samples per file. |
 | `RX_SAMPLE_LEN` | `20` | Length of each sample in seconds. |
 | `RX_SKIP_HDR` | `true` | Skip HDR files. |
@@ -136,7 +137,7 @@ Notes:
 - Originals are never replaced without Confirm.
 - Finalize is the only delete.
 - The space guard (`RX_MAX_STAGED_GB`) pauses staging if limits are exceeded.
-- Runs at the lowest CPU/IO priority.
+- Every ffmpeg runs at the lowest CPU/IO priority; the web page itself does not, so it stays responsive.
 - One job per GPU engine is fine.
 
 ## Development

@@ -40,6 +40,7 @@ class Worker:
         self.scanning: bool = False
         self._stop = threading.Event()
         self._scan_now = threading.Event()
+        self._slot_free = threading.Event()
         self._scan_thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
@@ -86,6 +87,15 @@ class Worker:
                 self._stop.wait(self.cfg.get("idle_s", 10))
                 continue
 
+            # Check parallel limit first: while every slot is busy, sleep until a job ends (or 2 s, so a raised
+            # limit or a stop is seen). It used to ask the database 20 times a second the whole time.
+            with self.lock:
+                n_jobs = len(self._jobs)
+            if n_jobs >= self.parallel(self.conn, self.cfg):
+                self._slot_free.wait(2.0)
+                self._slot_free.clear()
+                continue
+
             # Check space guard
             max_gb = self.cfg.get("max_staged_gb", 1000)
             limit_bytes = max_gb * 1024**3
@@ -95,13 +105,6 @@ class Worker:
                 self._stop.wait(self.cfg.get("idle_s", 10))
                 continue
             self.blocked = None
-
-            # Check parallel limit
-            with self.lock:
-                n_jobs = len(self._jobs)
-            if n_jobs >= self.parallel(self.conn, self.cfg):
-                self._stop.wait(0.05)
-                continue
 
             # Get next file
             f = rx_db.next_file(self.conn)
@@ -135,6 +138,15 @@ class Worker:
         """Signal an immediate scan."""
         self._scan_now.set()
 
+    def scan_folder(self, library: str, folder: str) -> None:
+        """Rescan one series or movie folder in the background (the Rescan button on a card)."""
+        def go():
+            try:
+                self.scan(self.conn, self.cfg["roots"], self.cfg, probe=self.probe, only=(library, folder))
+            except Exception:
+                traceback.print_exc()
+        threading.Thread(target=go, daemon=True).start()
+
     def _start_scan_thread(self) -> None:
         """Start the background scan thread."""
         if self._scan_thread is None or not self._scan_thread.is_alive():
@@ -162,10 +174,12 @@ class Worker:
         with self.lock:
             progress = self._jobs[f["path"]]  # the dict jobs_list() reports
 
+        error = "stopped"
         try:
             self.process(conn, f, cfg, run, probe=probe, progress=progress)
-        except Exception:
+        except Exception as e:
             traceback.print_exc()
+            error = str(e)[-500:] or type(e).__name__  # shown on the page, not only in the log
         finally:
             with self.lock:
                 path = f["path"]
@@ -175,4 +189,5 @@ class Worker:
             # If still running in DB, mark failed
             cur = rx_db.get_file(conn, path)
             if cur and cur.get("status") == "running":
-                rx_db.set_result(conn, path, status="failed", error="stopped")
+                rx_db.set_result(conn, path, status="failed", error=error)
+            self._slot_free.set()  # the scheduler can hand out the next file at once

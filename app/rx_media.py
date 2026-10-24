@@ -101,7 +101,7 @@ def probe(path: str) -> Optional[Dict[str, Any]]:
     """
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", path],
+            ["nice", "-n", "19", "ionice", "-c", "3", "ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", path],
             capture_output=True,
             text=True,
             timeout=60

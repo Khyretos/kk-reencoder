@@ -15,7 +15,7 @@ FIELDS: Dict[str, Tuple[type, Callable[[Any], bool]]] = {
     "rescan_s": (int, lambda x: 3600 <= x <= 604800),
     "check_every_episode": (bool, lambda x: True),
     "target_vmaf": (float, lambda x: 80.0 <= x <= 100.0),
-    "max_ratio": (float, lambda x: 0.3 <= x <= 0.95),
+    "max_ratio": (float, lambda x: 0.3 <= x <= 0.99),
 }
 
 
@@ -64,11 +64,15 @@ def _store(v: Any) -> str:
 def save(conn, cfg: Dict[str, Any], changes: Dict[str, Any]) -> Dict[str, Any]:
     """Check every change first (nothing is stored on an error), then store and apply them."""
     parsed = {name: parse(name, value) for name, value in changes.items()}
+    before = current(cfg)
     for name, v in parsed.items():
         rx_db.set_state(conn, f"setting.{name}", _store(v))
         cfg[name] = v
     if "parallel" in parsed:
         rx_db.set_state(conn, "parallel", str(parsed["parallel"]))  # the pool reads this key
+    if any(name in parsed and parsed[name] != before[name] for name in ("target_vmaf", "max_ratio")):
+        # files skipped as "too big at this quality" may qualify now: measure them again
+        rx_db.requeue_quality_skips(conn)
     return current(cfg)
 
 

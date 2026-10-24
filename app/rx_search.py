@@ -29,6 +29,39 @@ import rx_model
 import rx_stage
 
 
+# ffmpeg sizes its thread pools by the host's CPU count, not by the container's CPU limit: on a 4-CPU container on a
+# bigger host every decoder started dozens of threads (CPU throttled all the time, and 4K frames in flight filled the
+# 3 GB memory limit until the kernel killed ffmpeg). Every ffmpeg gets this many threads per decoder, encoder and filter.
+FFMPEG_THREADS = max(1, int(os.environ.get("RX_FFMPEG_THREADS", "2") or 2))
+# encodes run at the lowest CPU and IO priority, so the web page and the server stay quick while they work
+POLITE = ["nice", "-n", "19", "ionice", "-c", "3"]
+
+
+def polite_cmd(cmd: List[str], threads: int = FFMPEG_THREADS) -> List[str]:
+    """cmd at the lowest priority; an ffmpeg also gets a thread cap per input, output and filter graph."""
+    if not cmd or os.path.basename(cmd[0]) != "ffmpeg":
+        return POLITE + list(cmd)
+    out = [cmd[0], "-filter_threads", str(threads)]
+    i = 1
+    while i < len(cmd):
+        if cmd[i] == "-i":
+            out += ["-threads", str(threads)]
+        out.append(cmd[i])
+        i += 1
+    # encoder threads: an output option, right before the output name (the last argument)
+    out = out[:-1] + ["-threads", str(threads), out[-1]]
+    return POLITE + out
+
+
+def describe_rc(rc: int) -> str:
+    """A return code in words (negative: killed by that signal)."""
+    if rc == -9:
+        return "killed (-9), most likely the container ran out of memory"
+    if rc == -1:
+        return "timed out"
+    return f"exit code {rc}"
+
+
 def default_run(
     cmd: List[str],
     timeout: Optional[float] = None,
@@ -46,7 +79,7 @@ def default_run(
         Tuple of (returncode, stdout_text, stderr_text).
     """
     proc = subprocess.Popen(
-        cmd,
+        polite_cmd(cmd),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -102,11 +135,19 @@ def getsize(path: str) -> int:
     return os.path.getsize(path)
 
 
+def useful_tail(err: Optional[str], limit: int = 400) -> str:
+    """The end of ffmpeg's stderr without the libva/VPL start-up lines, which say nothing about the failure."""
+    lines = [l for l in (err or "").splitlines()
+             if l.strip() and not l.startswith(("libva info:", "libva error: vaGetDriverNameByIndex"))]
+    return "\n".join(lines)[-limit:]
+
+
 def _run_ok(run: Callable, cmd: List[str]) -> str:
     """Run a command; a non-zero exit raises RuntimeError with the stderr tail. Returns stderr."""
     rc, _, err = run(cmd)
     if rc != 0:
-        raise RuntimeError(f"{cmd[0]} failed ({rc}): {(err or '')[-400:]}")
+        tail = useful_tail(err)
+        raise RuntimeError(f"{os.path.basename(cmd[0])} {describe_rc(rc)}" + (f": {tail}" if tail else ""))
     return err or ""
 
 

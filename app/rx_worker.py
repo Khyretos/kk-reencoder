@@ -161,7 +161,8 @@ def process(conn, f, cfg, run, probe=None, progress=None):
             progress["phase"] = "searching quality"
         res = search_file(path, info, cfg, run, lib)
         if res is None or res.get("q") is None:
-            rx_db.set_result(conn, f["path"], status="skipped", reason="no smaller encode at target quality")
+            reason = rx_model.search_skip_reason((res or {}).get("trials") or [], cfg["target_vmaf"], cfg["max_ratio"])
+            rx_db.set_result(conn, f["path"], status="skipped", reason=reason)
             write_report(conn, lib, folder, cfg, in_media=False)
             return
         q, vmaf, ratio, worst = res["q"], res["vmaf"], res["ratio"], res["worst"]
@@ -222,7 +223,10 @@ def process(conn, f, cfg, run, probe=None, progress=None):
             block.clear()
             rc, out, err = run(cmd, on_line=on_line)
         if rc != 0:
-            rx_db.set_result(conn, f["path"], status="failed", error=err[-500:] if err else "encode failed")
+            from rx_search import describe_rc, useful_tail
+            tail = useful_tail(err)
+            rx_db.set_result(conn, f["path"], status="failed",
+                             error=f"encode {describe_rc(rc)}" + (f": {tail}" if tail else ""))
             if os.path.exists(part):
                 os.remove(part)
             write_report(conn, lib, folder, cfg, in_media=False)
@@ -252,9 +256,13 @@ def process(conn, f, cfg, run, probe=None, progress=None):
             write_report(conn, lib, folder, cfg, in_media=False)
             return
 
+        # the samples already proved the video shrinks enough; audio and subtitles are copied as they are, so the
+        # whole file shrinks by less. Any real saving is kept (it is still space back).
         new_size = os.path.getsize(part)
-        if new_size > f["size"] * cfg["max_ratio"]:
-            rx_db.set_result(conn, f["path"], status="skipped", reason="encode not smaller")
+        if new_size >= f["size"]:
+            pct = round(new_size / max(1, f["size"]) * 100)
+            rx_db.set_result(conn, f["path"], status="skipped",
+                             reason=f"the whole AV1 file came out at {pct}% of the original size, so nothing to gain")
             if os.path.exists(part):
                 os.remove(part)
             write_report(conn, lib, folder, cfg, in_media=False)

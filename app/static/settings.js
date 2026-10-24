@@ -20,7 +20,8 @@
     { name: 'max_ratio', label: 'Keep a re-encode only up to', type: 'select', options: [
       ['0.6', '60% of the original size'], ['0.7', '70% of the original size'],
       ['0.8', '80% of the original size'], ['0.9', '90% of the original size'],
-    ], help: 'Files that would not get smaller than this are left alone.' },
+      ['0.95', '95% of the original size (saves at least 5%)'], ['0.99', '99% (keep any saving)'],
+    ], help: 'Files that would not get smaller than this are left alone. Changing it measures the files skipped as too big again.' },
   ];
 
   let dialog, form, errorBox, loaded = {};

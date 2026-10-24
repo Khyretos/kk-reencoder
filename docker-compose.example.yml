@@ -33,9 +33,10 @@ services:
       - RX_HW_DECODE=true         # qsv: decode + 10-bit conversion on the GPU too (about 5x faster); falls back to CPU per file
       - RX_PARALLEL=2             # encodes at once (1-5), also adjustable on the page
       - RX_VMAF_THREADS=3         # CPU threads per quality check
+      - RX_FFMPEG_THREADS=2       # threads per ffmpeg decoder/encoder/filter; ffmpeg would otherwise use one per host CPU
       # --- quality ---
       - RX_TARGET_VMAF=95         # minimum VMAF score (95 is visually the same for most people)
-      - RX_MAX_RATIO=0.8          # only keep a re-encode that is at most 80% of the original size
+      - RX_MAX_RATIO=0.95         # keep a re-encode that saves at least 5% at the target quality (up to 0.99)
       - RX_FILTERS=               # optional CPU filters per library, e.g. Anime=deband (much slower; leave empty for full GPU speed)
       - RX_SAMPLES=3              # samples per file for the quality search
       - RX_SAMPLE_LEN=20          # seconds per sample

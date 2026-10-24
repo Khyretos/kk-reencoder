@@ -41,15 +41,20 @@ class LockedConnection:
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
         self._lock = threading.RLock()
+        self.generation = 0  # goes up with every write, so a cached summary knows when it is stale
+        self.cache: Dict[str, Any] = {}
 
     def execute(self, sql, params=()):
         with self._lock:
             cur = self._conn.execute(sql, params)
+            if not sql.lstrip()[:6].upper() in ("SELECT", "PRAGMA"):
+                self.generation += 1
             return _Rows(cur.fetchall(), cur.rowcount)
 
     def commit(self):
         with self._lock:
             self._conn.commit()
+            self.generation += 1
 
     def close(self):
         with self._lock:
@@ -308,7 +313,19 @@ def set_folder(conn: sqlite3.Connection, library: str, name: str, priority: Opti
 
 def folders(conn) -> List[Dict[str, Any]]:
     """One summary per (library, folder) that has files, in ONE grouped query (the page asks every few
-    seconds and the library has thousands of files), sorted by name case-insensitive, then library."""
+    seconds and the library has thousands of files), sorted by name case-insensitive, then library.
+    The result is kept until the next write: one status poll used to run this query three times."""
+    cache = getattr(conn, "cache", None)
+    gen = getattr(conn, "generation", None)
+    if cache is not None and cache.get("folders_gen") == gen:
+        return [dict(d) for d in cache["folders"]]
+    out = _folders(conn)
+    if cache is not None:
+        cache["folders"], cache["folders_gen"] = out, gen
+    return [dict(d) for d in out]
+
+
+def _folders(conn) -> List[Dict[str, Any]]:
     rows = conn.execute("""
         SELECT f.library AS library, f.folder AS name,
                COALESCE(d.priority, 0) AS priority, COALESCE(d.paused, 0) AS paused, COALESCE(d.encode, 0) AS encode,
@@ -382,7 +399,7 @@ def folder_files(conn: sqlite3.Connection, library: str, name: str) -> List[Dict
         List of file dicts in report shape, sorted by path.
     """
     cursor = conn.execute("""
-        SELECT path, name, status, codec, codec_after, size, new_bytes, vmaf, quality, reason, encoded_at
+        SELECT path, name, status, codec, codec_after, size, new_bytes, vmaf, quality, reason, error, encoded_at
         FROM files 
         WHERE library = ? AND folder = ?
         ORDER BY path ASC
@@ -401,6 +418,7 @@ def folder_files(conn: sqlite3.Connection, library: str, name: str) -> List[Dict
             "vmaf": row["vmaf"],
             "quality": row["quality"],
             "reason": row["reason"],
+            "error": row["error"],
             "encoded_at": row["encoded_at"]
         })
     
@@ -495,3 +513,13 @@ def folder_encode(conn, library: str, name: str) -> bool:
     row = conn.execute("SELECT encode FROM folders WHERE library = ? AND name = ?", (library, name)).fetchone()
     return bool(row and row["encode"])
 
+
+
+def requeue_quality_skips(conn) -> int:
+    """Put files the quality search skipped back to pending (after the target or size limit changed)."""
+    rows = conn.execute("SELECT path, reason FROM files WHERE status = 'skipped'").fetchall()
+    paths = [r["path"] for r in rows if rx_model.is_quality_reason(r["reason"])]
+    for p in paths:
+        conn.execute("UPDATE files SET status = 'pending', reason = NULL, error = NULL WHERE path = ?", (p,))
+    conn.commit()
+    return len(paths)

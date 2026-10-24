@@ -33,9 +33,16 @@ def _record(conn, root: str, path: str, cfg: dict, probe) -> None:
 
     st = os.stat(path)
     known = rx_db.get_file(conn, path)
-    if known and known["size"] == st.st_size and known["mtime"] == st.st_mtime:
+    unchanged = known and known["size"] == st.st_size and known["mtime"] == st.st_mtime
+    if unchanged and not (known["status"] == "skipped" and known["reason"] in rx_model.SETTING_REASONS):
         return
     info = probe(path)
+    if unchanged:
+        # skipped because of a setting (HDR, codecs, height, bitrate): look again, the setting may have changed
+        reason = rx_model.skip_reason(info, cfg) if info is not None else known["reason"]
+        if reason != known["reason"]:
+            rx_db.set_result(conn, path, status="pending" if reason is None else "skipped", reason=reason)
+        return
     rec = {"path": path, "library": os.path.basename(root), "folder": rx_model.folder_key(root, path),
            "size": st.st_size, "mtime": st.st_mtime, "codec": None, "height": None, "bitrate_kbps": None,
            "duration_s": None, "status": "skipped", "reason": "unreadable"}

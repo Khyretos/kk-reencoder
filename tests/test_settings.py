@@ -23,7 +23,7 @@ class Settings(unittest.TestCase):
         self.assertEqual(v["rescan_s"], 86400)
         self.assertTrue(v["check_every_episode"])
         self.assertEqual(v["target_vmaf"], 95.0)
-        self.assertEqual(v["max_ratio"], 0.8)
+        self.assertEqual(v["max_ratio"], 0.95)
         self.assertEqual(set(v), set(st.FIELDS))
 
     def test_save_validates_stores_and_applies(self):

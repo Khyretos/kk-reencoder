@@ -28,6 +28,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python3 -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=4).status == 200 else 1)"
 
-# lowest CPU and IO priority, inherited by every ffmpeg the server starts
+# the web server runs at normal priority so the page stays quick; every ffmpeg and ffprobe it starts runs at the
+# lowest CPU and IO priority (nice 19, ionice idle) with a thread cap (RX_FFMPEG_THREADS)
 ENTRYPOINT ["tini", "--"]
-CMD ["nice", "-n", "19", "ionice", "-c", "3", "python3", "/app/server.py"]
+CMD ["python3", "/app/server.py"]

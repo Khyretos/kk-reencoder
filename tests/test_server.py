@@ -20,7 +20,7 @@ class Config(unittest.TestCase):
         self.assertEqual(c["mode"], "report")
         self.assertEqual(c["encoder"], "qsv")
         self.assertEqual(c["target_vmaf"], 95.0)
-        self.assertEqual(c["max_ratio"], 0.8)
+        self.assertEqual(c["max_ratio"], 0.95)
         self.assertEqual(c["samples"], 3)
         self.assertEqual(c["parallel"], 2)
         self.assertEqual(c["filters"], {})
@@ -150,7 +150,11 @@ class Api(unittest.TestCase):
     def test_zz_file_actions(self):
         import tempfile
         import rx_stage
-        d = tempfile.mkdtemp()
+        d = os.path.join(tempfile.mkdtemp(), "Anime")
+        # finalize writes encoding_report.json into the library folder: keep that inside the temp folder
+        roots = self.app.cfg["roots"]
+        self.app.cfg["roots"] = [d]
+        self.addCleanup(self.app.cfg.__setitem__, "roots", roots)
         p = os.path.join(d, "Show", "e9.mkv")
         os.makedirs(os.path.dirname(rx_stage.staged_path(p)))
         open(p, "wb").write(b"o" * 1000)

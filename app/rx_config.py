@@ -81,7 +81,8 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     target_vmaf = parse_float(env.get("RX_TARGET_VMAF", "95"), 95.0)
 
     # Parse max_ratio
-    max_ratio = parse_float(env.get("RX_MAX_RATIO", "0.8"), 0.8)
+    # 0.95: any re-encode that saves at least 5% at the target quality is worth keeping
+    max_ratio = parse_float(env.get("RX_MAX_RATIO", "0.95"), 0.95)
 
     # Parse q_min, q_max, q_start
     q_min = parse_int(env.get("RX_Q_MIN", "10"), 10, 1, 51)
