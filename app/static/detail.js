@@ -244,7 +244,8 @@ window.KKDetail = {
       const err = (file.error || '').trim();
       if (!err) return 'failed without a message';
       if (err === 'stopped') return 'stopped: the quality search or encode crashed or the service restarted';
-      return err.split('\n').filter(Boolean).slice(-1)[0].slice(0, 160);
+      // the first line says what happened (e.g. "ffmpeg killed (-9)..."), the rest is ffmpeg's own detail
+      return err.split('\n').filter(Boolean)[0].slice(0, 200);
     }
     return '';
   },

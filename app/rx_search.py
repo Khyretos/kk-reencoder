@@ -138,7 +138,8 @@ def getsize(path: str) -> int:
 def useful_tail(err: Optional[str], limit: int = 400) -> str:
     """The end of ffmpeg's stderr without the libva/VPL start-up lines, which say nothing about the failure."""
     lines = [l for l in (err or "").splitlines()
-             if l.strip() and not l.startswith(("libva info:", "libva error: vaGetDriverNameByIndex"))]
+             if l.strip() and not l.lstrip().startswith(("libva info:", "libva error: vaGetDriverNameByIndex", "frame=", "size="))
+             and "elapsed=" not in l]
     return "\n".join(lines)[-limit:]
 
 
@@ -177,7 +178,7 @@ def _trial(q: int, samples: List[Tuple[int, str, str]], info: Dict[str, Any], cf
         made += [enc, log]
         # the reference already carries the filter, so the sample encode must not apply it twice
         _run_ok(run, rx_media.sample_encode_cmd(ref, enc, cfg["encoder"], q, cfg["device"]))
-        err = _run_ok(run, rx_media.vmaf_cmd(enc, ref, cfg["vmaf_threads"], log))
+        err = _run_ok(run, rx_media.vmaf_cmd(enc, ref, cfg["vmaf_threads"], log, info.get("height")))
         score = rx_media.parse_vmaf(err)
         if score is None:
             raise RuntimeError(f"no VMAF score for q={q}")

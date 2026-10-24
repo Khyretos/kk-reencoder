@@ -402,7 +402,10 @@ def encode_cmd(src: str, dst: str, encoder: str, q: int, device: Optional[str], 
     return args
 
 
-def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None) -> List[str]:
+VMAF_MAX_HEIGHT = 1080  # VMAF's default model is made for 1080p; 4K is scored at 1080p (4x less memory and work)
+
+
+def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None, height: Optional[int] = None) -> List[str]:
     """Build VMAF comparison command.
 
     Args:
@@ -414,12 +417,17 @@ def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None) ->
     Returns:
         List of ffmpeg arguments.
     """
-    lavfi = f"[0:v]setpts=PTS-STARTPTS,format=yuv420p[d];[1:v]setpts=PTS-STARTPTS,format=yuv420p[r];[d][r]libvmaf=n_threads={threads}:n_subsample=4"
+    # 4K pairs held at full size (10-bit, two decoders, libvmaf's buffers) used 1.4-1.7 GB per check and the kernel
+    # killed them at the container's memory limit: above 1080p both pictures are scaled down first
+    scale = f"scale=-2:{VMAF_MAX_HEIGHT}:flags=bicubic," if height and height > VMAF_MAX_HEIGHT else ""
+    lavfi = (f"[0:v]setpts=PTS-STARTPTS,{scale}format=yuv420p[d];[1:v]setpts=PTS-STARTPTS,{scale}format=yuv420p[r];"
+             f"[d][r]libvmaf=n_threads={threads}:n_subsample=4")
     if log is not None:
         lavfi += ":log_fmt=csv:log_path=" + log
     return [
         "ffmpeg",
         "-nostdin",
+        "-nostats",  # the score is logged at info level; progress lines only buried the real error
         "-i", encoded,
         "-i", ref,
         "-lavfi", lavfi,

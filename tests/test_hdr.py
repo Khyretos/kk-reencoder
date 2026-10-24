@@ -81,5 +81,23 @@ class Setting(unittest.TestCase):
         self.assertEqual(rx_db.get_file(conn, "/m/A/S/2.mkv")["status"], "skipped")
 
 
+class VmafMemory(unittest.TestCase):
+    def test_4k_is_scored_at_1080p(self):
+        lavfi = x.vmaf_cmd("/w/e.mkv", "/w/r.mkv", 3, None, 2160)
+        lavfi = lavfi[lavfi.index("-lavfi") + 1]
+        self.assertEqual(lavfi.count("scale=-2:1080:flags=bicubic,"), 2)
+        self.assertNotIn("scale=", x.vmaf_cmd("/w/e.mkv", "/w/r.mkv", 3, None, 1080)[-4])
+        self.assertIn("-nostats", x.vmaf_cmd("/w/e.mkv", "/w/r.mkv", 3))
+
+    def test_error_text_drops_progress_lines(self):
+        import rx_search
+        err = ("frame=  289 fps=6.6 q=-0.0 size=N/A time=00:00:12.05 bitrate=N/A speed=0.277x elapsed=0:00:43.52\n"
+               "me=  298 fps=6.6 q=-0.0 size=N/A time=00:00:12.42 speed=0.276x elapsed=0:00:45.02\n")
+        self.assertEqual(rx_search.useful_tail(err), "")
+        with self.assertRaises(RuntimeError) as e:
+            rx_search._run_ok(lambda cmd: (-9, "", err), ["ffmpeg", "-i", "a"])
+        self.assertEqual(str(e.exception), "ffmpeg killed (-9), most likely the container ran out of memory")
+
+
 if __name__ == "__main__":
     unittest.main()
