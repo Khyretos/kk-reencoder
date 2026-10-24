@@ -16,14 +16,16 @@ FIELDS: Dict[str, Tuple[type, Callable[[Any], bool]]] = {
     "check_every_episode": (bool, lambda x: True),
     "target_vmaf": (float, lambda x: 80.0 <= x <= 100.0),
     "max_ratio": (float, lambda x: 0.3 <= x <= 0.99),
+    "skip_hdr": (bool, lambda x: True),
 }
 
 
 def current(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """The value of every field as the service uses it now."""
     out = {name: cfg.get(name) for name in FIELDS}
-    if out["check_every_episode"] is None:
-        out["check_every_episode"] = True
+    for name in ("check_every_episode", "skip_hdr"):
+        if out[name] is None:
+            out[name] = True
     return out
 
 
@@ -73,6 +75,8 @@ def save(conn, cfg: Dict[str, Any], changes: Dict[str, Any]) -> Dict[str, Any]:
     if any(name in parsed and parsed[name] != before[name] for name in ("target_vmaf", "max_ratio")):
         # files skipped as "too big at this quality" may qualify now: measure them again
         rx_db.requeue_quality_skips(conn)
+    if parsed.get("skip_hdr") is False and before["skip_hdr"]:
+        rx_db.requeue_reason(conn, "HDR")  # HDR files are welcome now
     return current(cfg)
 
 

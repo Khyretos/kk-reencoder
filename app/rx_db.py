@@ -523,3 +523,11 @@ def requeue_quality_skips(conn) -> int:
         conn.execute("UPDATE files SET status = 'pending', reason = NULL, error = NULL WHERE path = ?", (p,))
     conn.commit()
     return len(paths)
+
+
+def requeue_reason(conn, reason: str) -> int:
+    """Put files skipped for exactly this reason back to pending (a setting that excluded them was turned off)."""
+    n = conn.execute("UPDATE files SET status = 'pending', reason = NULL WHERE status = 'skipped' AND reason = ?",
+                     (reason,)).rowcount
+    conn.commit()
+    return n

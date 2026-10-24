@@ -207,6 +207,24 @@ class Worker(unittest.TestCase):
         got = rx_db.get_file(self.c, f["path"])
         self.assertEqual(got["status"], "skipped")
         self.assertTrue(got["reason"].startswith("the whole AV1 file came out at 2500%"), got["reason"])
+    def test_hdr_copy_without_hdr_tags_is_not_kept(self):
+        def hdr_probe(path):
+            i = fake_probe(path)
+            if "/.reencoder/" not in path:
+                i.update(hdr=True, colour={"primaries": "bt2020", "transfer": "smpte2084", "space": "bt2020nc"})
+            return i
+        run = FakeFfmpeg()
+        cfg = dict(self.cfg, skip_hdr=False, mode="stage", frames_dir=os.path.join(self.tmp, "frames"),
+                   roots=[self.lib])
+        w.scan(self.c, [self.lib], cfg, probe=hdr_probe)
+        f = rx_db.next_file(self.c)
+        w.process(self.c, f, cfg, run, probe=hdr_probe)
+        got = rx_db.get_file(self.c, f["path"])
+        self.assertEqual((got["status"], got["error"]), ("failed", "the AV1 copy lost the HDR colour tags"))
+        self.assertFalse(os.path.exists(rx_stage.staged_path(f["path"])))
+        enc = [c for c in run.cmds if "-progress" in c][0]
+        self.assertEqual(enc[enc.index("-color_trc:v:0") + 1], "smpte2084")
+
 
 if __name__ == "__main__":
     unittest.main()

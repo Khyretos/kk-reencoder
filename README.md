@@ -40,7 +40,7 @@ The screenshots come from a real library. `docs/screenshots/shoot.mjs` takes the
 
 The service scans library folders in alphabetical order. It identifies series and movies by title folder; season folders are counted as part of their series.
 
-It skips files that are already AV1, HDR (by default), low-bitrate, or use unselected codecs. Every skipped or failed file shows why in the series window, with the measured numbers when the quality search decided (for example "at VMAF 95 the AV1 copy would be 97% of the original size; the size limit is 95%"). Files skipped because of a setting are looked at again by the next scan, and changing the quality target or size limit measures the "too big" ones again.
+It skips files that are already AV1, HDR (by default; "Skip HDR videos" on the Settings screen), low-bitrate, or use unselected codecs. With HDR allowed, HDR10 and HLG files stay HDR (colour tags and mastering metadata kept); Dolby Vision drops to its HDR10 picture, and Dolby Vision profile 5 (no HDR10 picture) is always skipped. Every skipped or failed file shows why in the series window, with the measured numbers when the quality search decided (for example "at VMAF 95 the AV1 copy would be 97% of the original size; the size limit is 95%"). Files skipped because of a setting are looked at again by the next scan, and changing the quality target or size limit measures the "too big" ones again.
 
 For each file:
 1. It cuts 3 x 20 s samples.
@@ -124,7 +124,7 @@ Notes:
 | `RX_FFMPEG_THREADS` | `2` | Threads per ffmpeg decoder, encoder and filter graph. ffmpeg otherwise starts one per host CPU, which overloads a CPU-limited container and can run it out of memory. |
 | `RX_SAMPLES` | `3` | Number of samples per file. |
 | `RX_SAMPLE_LEN` | `20` | Length of each sample in seconds. |
-| `RX_SKIP_HDR` | `true` | Skip HDR files. |
+| `RX_SKIP_HDR` | `true` | Skip HDR files. Also on the Settings screen. Off: HDR10/HLG stay HDR, Dolby Vision keeps its HDR10 picture. |
 | `RX_CODECS` | `h264,hevc,mpeg4,vc1,mpeg2video,wmv3,msmpeg4v3` | Source codecs to consider (AV1 is always skipped). |
 | `RX_MAX_HEIGHT` | `2160` | Skip taller videos. |
 | `RX_RESCAN_S` | `86400` | Rescan the library every N seconds (once a day), in the background. Also on the Settings screen. |

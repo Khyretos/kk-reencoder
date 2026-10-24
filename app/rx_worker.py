@@ -92,8 +92,8 @@ def make_frames(path, staged, info, worst, cfg, run):
         for i, t in enumerate(times):
             orig_frame = os.path.join(d, f"{i}-a.jpg")
             stage_frame = os.path.join(d, f"{i}-b.jpg")
-            run(rx_stage.frame_cmd(path, t, orig_frame))
-            run(rx_stage.frame_cmd(staged, t, stage_frame))
+            run(rx_stage.frame_cmd(path, t, orig_frame, hdr=bool(info.get("hdr"))))
+            run(rx_stage.frame_cmd(staged, t, stage_frame, hdr=bool(info.get("hdr"))))
 
         frames_json = os.path.join(d, "frames.json")
         data = {"path": path, "times": times}
@@ -195,9 +195,10 @@ def process(conn, f, cfg, run, probe=None, progress=None):
 
         # Build encode command
         filters = cfg.get("filters", {}).get(lib, {})
+        hdr = {"colour": info.get("colour"), "dv_profile": info.get("dv_profile")}
         cmd = rx_media.encode_cmd(
             path, part, cfg["encoder"], q, cfg["device"],
-            info.get("video_index", 0), cfg.get("filters", {}).get(lib)
+            info.get("video_index", 0), cfg.get("filters", {}).get(lib), **hdr
         )
 
         block = []  # ffmpeg -progress prints key=value lines and ends each block with progress=...
@@ -217,7 +218,7 @@ def process(conn, f, cfg, run, probe=None, progress=None):
 
         # first try the full-GPU path; files the GPU cannot decode (10-bit H.264, old codecs) fall back to the CPU decode
         gpu_cmd = rx_media.encode_cmd(path, part, cfg["encoder"], q, cfg["device"], info.get("video_index", 0),
-                                      cfg.get("filters", {}).get(lib), hw_decode=cfg.get("hw_decode", True))
+                                      cfg.get("filters", {}).get(lib), hw_decode=cfg.get("hw_decode", True), **hdr)
         rc, out, err = run(gpu_cmd, on_line=on_line)
         if rc != 0 and gpu_cmd != cmd:
             block.clear()
@@ -243,6 +244,14 @@ def process(conn, f, cfg, run, probe=None, progress=None):
 
         if new_info["codec"] != "av1":
             rx_db.set_result(conn, f["path"], status="failed", error="bad codec")
+            if os.path.exists(part):
+                os.remove(part)
+            write_report(conn, lib, folder, cfg, in_media=False)
+            return
+
+        if info.get("hdr") and not new_info.get("hdr"):
+            # an HDR original without its colour tags would play washed out: never keep such a copy
+            rx_db.set_result(conn, f["path"], status="failed", error="the AV1 copy lost the HDR colour tags")
             if os.path.exists(part):
                 os.remove(part)
             write_report(conn, lib, folder, cfg, in_media=False)

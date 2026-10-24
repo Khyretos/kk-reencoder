@@ -15,6 +15,8 @@
     ], help: 'New episodes of ticked series (or of everything in Automatic) are encoded by themselves.' },
     { name: 'check_every_episode', label: 'Check every episode', type: 'checkbox',
       help: 'Off: after the first two episodes a series keeps its quality and skips the CPU check, so it is mostly GPU work.' },
+    { name: 'skip_hdr', label: 'Skip HDR videos', type: 'checkbox',
+      help: 'Off: HDR10 and HLG videos are re-encoded too and stay HDR. Dolby Vision drops to its HDR10 picture; Dolby Vision profile 5 (no HDR10 picture) is always left alone.' },
     { name: 'target_vmaf', label: 'Quality target (VMAF)', type: 'number', min: 80, max: 100, step: 0.5,
       help: 'Higher is closer to the original; 95 looks the same to most people.' },
     { name: 'max_ratio', label: 'Keep a re-encode only up to', type: 'select', options: [

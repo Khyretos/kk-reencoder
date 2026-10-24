@@ -44,6 +44,11 @@ def parse_probe(probe: Dict[str, Any], size: int) -> Optional[Dict[str, Any]]:
     
     # HDR check: color_transfer is smpte2084 or arib-std-b67
     hdr = v.get("color_transfer", "") in ("smpte2084", "arib-std-b67")
+    # Dolby Vision profile (None without a configuration record): profile 5 has no HDR10 picture underneath
+    dv_profile = None
+    for sd in v.get("side_data_list") or []:
+        if sd.get("side_data_type") == "DOVI configuration record":
+            dv_profile = sd.get("dv_profile")
     
     # FPS from avg_frame_rate 'a/b' -> float(a)/float(b)
     avg_fps = v.get("avg_frame_rate", "0/1")
@@ -70,8 +75,8 @@ def parse_probe(probe: Dict[str, Any], size: int) -> Optional[Dict[str, Any]]:
     elif duration_s > 0 and size > 0:
         bitrate_kbps = (size * 8) // duration_s // 1000
     
-    # video_index is the position of the chosen stream among video streams that are not cover art
-    video_index = len(video_streams) - 1
+    # video_index is the position of the chosen stream among video streams that are not cover art (the first one)
+    video_index = 0
 
     return {
         "codec": codec,
@@ -80,6 +85,10 @@ def parse_probe(probe: Dict[str, Any], size: int) -> Optional[Dict[str, Any]]:
         "pix_fmt": pix_fmt,
         "ten_bit": ten_bit,
         "hdr": hdr,
+        # colour tags the AV1 copy must carry to look the same (HDR10 / HLG); None where the source has none
+        "colour": {"primaries": v.get("color_primaries"), "transfer": v.get("color_transfer"),
+                   "space": v.get("color_space")} if hdr else None,
+        "dv_profile": dv_profile,
         "fps": fps,
         "duration_s": duration_s,
         "bitrate_kbps": bitrate_kbps,
@@ -297,8 +306,24 @@ def filter_args(name: Optional[str]) -> List[str]:
     return ["-vf", FILTERS[name]]
 
 
+def hdr_args(colour: Optional[Dict[str, Any]], dv_profile: Optional[int]) -> List[str]:
+    """Output options that keep an HDR picture HDR: the colour tags written into the AV1 stream (ffmpeg passes the
+    mastering display and light level side data on by itself), and for Dolby Vision the configuration record dropped,
+    so players show the HDR10 picture underneath instead of looking for Dolby Vision data that is not there."""
+    args: List[str] = []
+    if colour:
+        for opt, key in (("-color_primaries:v:0", "primaries"), ("-color_trc:v:0", "transfer"),
+                         ("-colorspace:v:0", "space")):
+            if colour.get(key):
+                args += [opt, colour[key]]
+    if dv_profile is not None:
+        args += ["-bsf:v:0", "dovi_rpu=strip=1"]
+    return args
+
+
 def encode_cmd(src: str, dst: str, encoder: str, q: int, device: Optional[str], video_index: int, filter: Optional[str] = None,
-               hw_decode: bool = False) -> List[str]:
+               hw_decode: bool = False, colour: Optional[Dict[str, Any]] = None,
+               dv_profile: Optional[int] = None) -> List[str]:
     """Build full encoding command preserving all streams.
 
     Args:
@@ -362,6 +387,7 @@ def encode_cmd(src: str, dst: str, encoder: str, q: int, device: Optional[str], 
     # Actually, for hw upload we need to ensure vf applies to the right stream
     # But per spec, -vf stays as is in encoder_args
     args.extend(new_enc_args)
+    args.extend(hdr_args(colour, dv_profile))
     
     # Add mov_text subtitle codec for mp4/m4v
     if dst.endswith((".mp4", ".m4v")):

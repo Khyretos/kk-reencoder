@@ -242,7 +242,12 @@ def frame_times(duration: float, worst: List[float], n: int = 5) -> List[float]:
     return sorted(kept)
 
 
-def frame_cmd(src: str, t: float, out: str) -> List[str]:
+# HDR (PQ/HLG) frames tone-mapped to an ordinary picture, so the JPEGs for Compare do not look washed out
+TONEMAP = ("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,"
+           "zscale=t=bt709:m=bt709:r=tv,format=yuv420p,")
+
+
+def frame_cmd(src: str, t: float, out: str, hdr: bool = False) -> List[str]:
     """Generate ffmpeg command for extracting a single frame.
 
     Args:
@@ -260,7 +265,7 @@ def frame_cmd(src: str, t: float, out: str) -> List[str]:
         "ffmpeg", "-nostdin", "-v", "error",
         "-ss", t_str, "-i", src,
         "-frames:v", "1",
-        "-vf", "scale=-2:'min(1080,ih)'", "-q:v", "3", "-y", out
+        "-vf", (TONEMAP if hdr else "") + "scale=-2:'min(1080,ih)'", "-q:v", "3", "-y", out
     ]
 
 

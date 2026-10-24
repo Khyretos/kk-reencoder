@@ -230,7 +230,8 @@ window.KKDetail = {
   reasonText: function(file) {
     const plain = {
       'already AV1': 'already AV1: nothing to gain',
-      'HDR': 'HDR video: left alone because "Skip HDR" is on',
+      'HDR': 'HDR video: left alone because "Skip HDR videos" is on in Settings',
+      'Dolby Vision profile 5': 'Dolby Vision profile 5 has no HDR10 picture underneath: re-encoding would get the colours wrong',
       'codec not selected': 'its codec (' + (file.codec_before || '?') + ') is not in the list of codecs to re-encode',
       'resolution too high': 'taller than the maximum height setting',
       'bitrate already low': 'already a small file for its resolution: AV1 would barely save anything',

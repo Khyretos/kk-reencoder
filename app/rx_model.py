@@ -96,6 +96,10 @@ def skip_reason(info: Dict[str, Any], cfg: Dict[str, Any]) -> Optional[str]:
     if info.get('codec') == 'av1':
         return 'already AV1'
     
+    # Dolby Vision profile 5 has no HDR10 picture to fall back to: the colours would be wrong without its data
+    if info.get('dv_profile') == 5:
+        return 'Dolby Vision profile 5'
+
     # Check HDR
     if info.get('hdr', False) and cfg.get('skip_hdr', False):
         return 'HDR'
@@ -417,7 +421,7 @@ def parse_progress(lines: List[str], duration_s: float) -> Dict[str, Any]:
         value = value.strip()
         if value == 'N/A' and key in ('frame', 'fps', 'out_time_us'):
             continue  # ffmpeg prints N/A until the first frames are out; it used to crash the progress line
-        
+
         if key == 'frame':
             result['frame'] = int(value)
         elif key == 'fps':
