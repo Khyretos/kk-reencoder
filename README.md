@@ -51,62 +51,28 @@ For each file:
 
 After searching 2 files per series, the service reuses that quality setting with one check sample for the rest of the series.
 
-## Quick start
+## Deploy
 
-Copy `docker-compose.example.yml` to `docker-compose.yml`, adjust the lines marked ADJUST (media folders, user, GPU) and run `docker compose up -d`. Open http://127.0.0.1:8080. Note it has no login of its own: put it behind your reverse proxy with sign-in before exposing it.
+You need Docker with Compose v2.24 or newer. A GPU is optional (Intel Arc/iGPU for `qsv`, Intel/AMD for `vaapi`); without one, use `RX_ENCODER=svt` (CPU, slow) or just measure in report mode.
 
-```yaml
-services:
-  reencoder:
-    build: .
-    container_name: kk-reencoder
-    restart: unless-stopped
-    user: "1000:1000"            # ADJUST: uid:gid that owns your media files
-    group_add:
-      - "993"                     # ADJUST: your render group
-    devices:
-      - /dev/dri/renderD128:/dev/dri/renderD128   # ADJUST: your GPU
-    volumes:
-      - /srv/media/Anime:/media/Anime
-      - /srv/media/Movies:/media/Movies
-      - /srv/media/Series:/media/Series
-      - reencoder-data:/data
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      - RX_ROOTS=/media/Anime,/media/Movies,/media/Series
-      - RX_MODE=manual
-      - RX_ENCODER=qsv
-      - RX_DEVICE=/dev/dri/renderD128
-      - RX_HW_DECODE=true
-      - RX_PARALLEL=2
-      - RX_TARGET_VMAF=95
-      - RX_MAX_RATIO=0.95
-      - RX_FILTERS=
-      - RX_SAMPLES=3
-      - RX_SAMPLE_LEN=20
-      - RX_SEARCH_PER_FOLDER=2
-      - RX_MAX_STAGED_GB=1000
-      - TZ=Europe/Amsterdam
-    mem_limit: 3g
-    cpus: 4
-    cpu_shares: 128
-    pids_limit: 256
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
+1. Clone this repo and enter it.
+2. `cp .env.example .env` and set at least:
+   - `RX_MEDIA_DIR`: the host folder with your library (it is mounted as `/media`), and `RX_ROOTS` if only some folders in it should be scanned, e.g. `/media/Anime,/media/Series`.
+   - `RX_UID` and `RX_GID`: the owner of the media files (`id -u`, `id -g`). The container runs as that user; re-encodes go into hidden `.reencoder` folders next to the originals, so it needs write access in manual and stage mode.
+   - `RX_MODE`: `report` (default, measure only, changes nothing), `manual` or `stage`.
+   - `TZ`, e.g. `Europe/Amsterdam`.
+3. For a GPU or a reverse proxy: `cp docker-compose.override.example.yml docker-compose.override.yml`. For the GPU set `RX_RENDER_DEVICE` (`ls /dev/dri`) and `RX_RENDER_GID` (`getent group render | cut -d: -f3`) in `.env`. For a proxy on a Docker network set `RX_PROXY_NETWORK`; the override then publishes no host port. Delete the part you do not need (the proxy part includes the `ports: !reset []` line).
+4. `docker compose up -d --build`, then open http://127.0.0.1:8080 (or your proxy host). The first scan runs in the background.
 
-volumes:
-  reencoder-data:
-```
+It has no login of its own: put it behind a sign-in before you open it to the network.
 
-Notes:
-- Find your render group ID with `getent group render`.
-- Mount media as `:ro` for report mode, read-write for stage mode.
-- Put the service behind a sign-in page; it has no login of its own.
+Update: `git pull && docker compose up -d --build`. Remove: `docker compose down` (add `-v` to also delete the database and reports; your media and any `.reencoder` folders stay).
+
+The image pins ffmpeg to a BtbN month-end build checked by sha256 (`FFMPEG_*` build args in the Dockerfile); to update, take a newer month-end `autobuild-*` release's `linux64-gpl-8.1` asset and its sha256.
 
 ## Settings
+
+All of these go in `.env`; `.env.example` lists them with the host settings (`RX_MEDIA_DIR`, `RX_UID`, `RX_GID`, `RX_RENDER_DEVICE`, `RX_RENDER_GID`, `RX_PROXY_NETWORK`, `RX_BIND`, `RX_HOST_PORT`, `RX_IMAGE`, `RX_MEM_LIMIT`, `RX_CPUS`, `TZ`). `RX_DEVICE` is set from `RX_RENDER_DEVICE`.
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
@@ -130,7 +96,6 @@ Notes:
 | `RX_RESCAN_S` | `86400` | Rescan the library every N seconds (once a day), in the background. Also on the Settings screen. |
 | `RX_CHECK_EVERY_EPISODE` | `true` | `false`: once a series has its quality, later episodes skip the CPU check sample. Also on the Settings screen. |
 | `RX_SEARCH_PER_FOLDER` | `2` | Files to search per series before locking quality. |
-| `RX_PORT` | `8080` | Web UI port. |
 
 ## Safety
 

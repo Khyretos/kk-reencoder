@@ -2,22 +2,33 @@
 # and the Python 3 standard library; the Intel media driver comes from Debian non-free.
 FROM debian:trixie-slim
 
+# Pinned ffmpeg: a BtbN month-end build (those are kept long-term), checked by sha256.
+# To update: pick a newer month-end autobuild-YYYY-MM-DD release, take the linux64-gpl-8.1 asset and its sha256.
+ARG FFMPEG_RELEASE=autobuild-2026-09-30-13-08
+ARG FFMPEG_BUILD=ffmpeg-n8.1.3-9-g29e619e767-linux64-gpl-8.1
+ARG FFMPEG_SHA256=97ce978979194b5cf7e06a5e68020dbdaa7a4f3294c5452b6a1bc347100dbb79
+
 # Intel media driver + VPL runtime for QSV, tini, python3; BtbN's static ffmpeg 8.1 (libvmaf, libvpl, vaapi)
 RUN sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources \
  && apt-get update && apt-get install -y --no-install-recommends \
     intel-media-va-driver-non-free libmfx-gen1.2 libvpl2 ca-certificates tini python3 curl xz-utils \
- && curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz | tar -xJ -C /opt \
- && ln -s /opt/ffmpeg-n8.1-latest-linux64-gpl-8.1/bin/ffmpeg /opt/ffmpeg-n8.1-latest-linux64-gpl-8.1/bin/ffprobe /usr/local/bin/ \
+ && curl -fsSL -o /tmp/ffmpeg.tar.xz "https://github.com/BtbN/FFmpeg-Builds/releases/download/$FFMPEG_RELEASE/$FFMPEG_BUILD.tar.xz" \
+ && echo "$FFMPEG_SHA256  /tmp/ffmpeg.tar.xz" | sha256sum -c - \
+ && tar -xJf /tmp/ffmpeg.tar.xz -C /opt && rm /tmp/ffmpeg.tar.xz && mv "/opt/$FFMPEG_BUILD" /opt/ffmpeg \
+ && ln -s /opt/ffmpeg/bin/ffmpeg /opt/ffmpeg/bin/ffprobe /usr/local/bin/ \
  && apt-get purge -y curl xz-utils && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     LIBVA_DRIVERS_PATH=/usr/lib/x86_64-linux-gnu/dri LIBVA_DRIVER_NAME=iHD \
     RX_DB=/data/reencoder.db
 
-# uid/gid 1000 owns the media files; gid 993 is the host's render group (/dev/dri/renderD*)
-RUN groupadd --gid 1000 reencoder && groupadd --gid 993 render \
- && useradd --uid 1000 --gid 1000 --groups render --no-create-home --shell /usr/sbin/nologin reencoder \
- && mkdir -p /data && chown reencoder:reencoder /data
+# RX_UID/RX_GID: the owner of the media files (the container runs as that user). The GPU's render group
+# is added at run time with group_add (RX_RENDER_GID in docker-compose.override.example.yml), not baked in.
+ARG RX_UID=1000
+ARG RX_GID=1000
+RUN (getent group "$RX_GID" >/dev/null || groupadd --gid "$RX_GID" reencoder) \
+ && useradd --uid "$RX_UID" --gid "$RX_GID" --no-create-home --shell /usr/sbin/nologin reencoder \
+ && mkdir -p /data && chown "$RX_UID:$RX_GID" /data
 
 COPY app /app
 

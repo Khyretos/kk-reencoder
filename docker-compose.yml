@@ -1,0 +1,68 @@
+# kk-reencoder: AV1 re-encoder with a web page. Works on its own: `docker compose up -d --build`,
+# then open http://127.0.0.1:8080. Every setting comes from .env (see .env.example); without one it
+# measures a ./media folder in report mode (nothing is changed). GPU, reverse-proxy network and
+# other host wiring go in docker-compose.override.yml; see docker-compose.override.example.yml.
+# It has no login of its own: put it behind a sign-in before opening it to the network.
+services:
+  reencoder:
+    build:
+      context: .
+      args:
+        RX_UID: ${RX_UID:-1000}
+        RX_GID: ${RX_GID:-1000}
+    image: ${RX_IMAGE:-kk-reencoder:local}
+    restart: unless-stopped
+    user: "${RX_UID:-1000}:${RX_GID:-1000}"
+    volumes:
+      # the library; the container sees it as /media (read-write: re-encodes go into hidden .reencoder
+      # folders next to the originals)
+      - ${RX_MEDIA_DIR:-./media}:/media
+      - reencoder-data:/data     # database, comparison frames, reports, samples
+    ports:
+      - "${RX_BIND:-127.0.0.1}:${RX_HOST_PORT:-8080}:8080"
+    environment:
+      # what to work on
+      RX_ROOTS: ${RX_ROOTS:-}
+      RX_MODE: ${RX_MODE:-report}
+      RX_CODECS: ${RX_CODECS:-h264,hevc,mpeg4,vc1,mpeg2video,wmv3,msmpeg4v3}
+      RX_SKIP_HDR: ${RX_SKIP_HDR:-true}
+      RX_MAX_HEIGHT: ${RX_MAX_HEIGHT:-2160}
+      # hardware
+      RX_ENCODER: ${RX_ENCODER:-qsv}
+      RX_DEVICE: ${RX_RENDER_DEVICE:-/dev/dri/renderD128}
+      RX_HW_DECODE: ${RX_HW_DECODE:-true}
+      RX_PARALLEL: ${RX_PARALLEL:-2}
+      RX_VMAF_THREADS: ${RX_VMAF_THREADS:-4}
+      RX_FFMPEG_THREADS: ${RX_FFMPEG_THREADS:-2}
+      # quality
+      RX_TARGET_VMAF: ${RX_TARGET_VMAF:-95}
+      RX_MAX_RATIO: ${RX_MAX_RATIO:-0.95}
+      RX_FILTERS: ${RX_FILTERS:-}
+      RX_SAMPLES: ${RX_SAMPLES:-3}
+      RX_SAMPLE_LEN: ${RX_SAMPLE_LEN:-20}
+      RX_SEARCH_PER_FOLDER: ${RX_SEARCH_PER_FOLDER:-2}
+      RX_CHECK_EVERY_EPISODE: ${RX_CHECK_EVERY_EPISODE:-true}
+      # space and housekeeping
+      RX_MAX_STAGED_GB: ${RX_MAX_STAGED_GB:-1000}
+      RX_RESCAN_S: ${RX_RESCAN_S:-86400}
+      RX_PORT: "8080"
+      TZ: ${TZ:-UTC}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    mem_limit: ${RX_MEM_LIMIT:-3g}
+    memswap_limit: ${RX_MEM_LIMIT:-3g}
+    cpus: ${RX_CPUS:-4}
+    cpu_shares: 128
+    pids_limit: 256
+    blkio_config:
+      weight: 10
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  reencoder-data:

@@ -1,0 +1,20 @@
+# Copy to docker-compose.override.yml and keep the parts you need; `docker compose up -d` picks it up.
+# Values come from .env (RX_RENDER_DEVICE, RX_RENDER_GID, RX_PROXY_NETWORK).
+services:
+  reencoder:
+    # GPU (Intel/AMD, for RX_ENCODER=qsv or vaapi): pass the render node in and join its group.
+    # RX_RENDER_GID is the host's render group: `getent group render | cut -d: -f3`.
+    devices:
+      - ${RX_RENDER_DEVICE:-/dev/dri/renderD128}:${RX_RENDER_DEVICE:-/dev/dri/renderD128}
+    group_add:
+      - "${RX_RENDER_GID:-993}"
+    # Behind a reverse proxy on a Docker network (kireserver: Nginx Proxy Manager forwards
+    # reencoder.kreative-kompas.com to reencoder:8080): join its network and publish no host port.
+    ports: !reset []
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: ${RX_PROXY_NETWORK:-nginx-reverse-proxy_default}
