@@ -151,5 +151,13 @@ class ScanFolder(unittest.TestCase):
         self.assertEqual(seen, [("A", "Show")])
 
 
+class ProgressNA(unittest.TestCase):
+    def test_na_values_at_the_start_do_not_crash(self):
+        p = m.parse_progress(["frame=N/A", "fps=N/A", "out_time_us=N/A", "speed=N/A", "progress=continue"], 100.0)
+        self.assertEqual((p["frame"], p["fps"], p["percent"], p["eta_s"]), (0, 0.0, 0.0, None))
+        p = m.parse_progress(["frame=240", "fps=48.0", "out_time_us=10000000", "speed=2x", "progress=continue"], 100.0)
+        self.assertEqual((p["frame"], round(p["percent"]), round(p["eta_s"])), (240, 10, 45))
+
+
 if __name__ == "__main__":
     unittest.main()

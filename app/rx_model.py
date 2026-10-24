@@ -415,6 +415,8 @@ def parse_progress(lines: List[str], duration_s: float) -> Dict[str, Any]:
         key, _, value = line.partition('=')
         key = key.strip()
         value = value.strip()
+        if value == 'N/A' and key in ('frame', 'fps', 'out_time_us'):
+            continue  # ffmpeg prints N/A until the first frames are out; it used to crash the progress line
         
         if key == 'frame':
             result['frame'] = int(value)

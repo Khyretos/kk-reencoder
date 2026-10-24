@@ -7,6 +7,7 @@
 - Finalize says what it really frees: the size of the kept originals, plus the saving against before re-encoding. "Finalize all" asks once and does the whole series in one call.
 - Faster page: the web server runs at normal priority and only ffmpeg runs at nice 19; every ffmpeg gets a thread cap (`RX_FFMPEG_THREADS`, default 2) instead of one thread per host CPU, which kept the 4-CPU container throttled and ran it out of memory; the scheduler sleeps until a job ends instead of asking the database 20 times a second; the series summary is computed once per change instead of three times per poll.
 - The Rescan button on a single series works again (it called a method that did not exist).
+- No more crash in the progress line when ffmpeg reports N/A at the start of an encode (46 tracebacks a day in the log).
 
 - Queue panel: see which series are encoded or measured next, drag to reorder (mouse or finger), ↑ to send one to the front, ✕ to take it out, and put it back from "Taken out". Every panel on both pages folds from its heading and then shows its numbers in one line; remembered per browser.
 - Queue rows in the style of the CI queue page (circled number, library and action chips, accent edge on the next one); every library card and list row has a coloured edge for its state (done, ready to confirm, partly done, queued, running, skipped). Reordering only changes the group you moved in. "Encoding next" and "Measuring next" fold on their own too.
