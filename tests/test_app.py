@@ -118,8 +118,27 @@ class App(unittest.TestCase):
         self.assertEqual(os.path.getsize(p), 1000)
         self.assertTrue(os.path.exists(os.path.join(self.tmp, "reports", "Anime", "Show", "encoding_report.json")))
 
+    def test_retry_failed(self):
+        add(self.conn, "/m/Anime/Show/3.mkv", "Show", "failed")
+        rx_db.set_result(self.conn, "/m/Anime/Show/3.mkv", error="encode exit code 1")
+        row = self.app.file_action("/m/Anime/Show/3.mkv", "retry")
+        self.assertEqual(row["status"], "pending")
+        self.assertIsNone(row["error"])
+        with self.assertRaises(rx_stage.StageError):  # only failed files can be retried
+            self.app.file_action("/m/Anime/Show/1.mkv", "retry")
+        add(self.conn, "/m/Anime/Show/4.mkv", "Show", "failed")
+        add(self.conn, "/m/Anime/Show/5.mkv", "Show", "failed")
+        self.assertEqual(self.app.folder_action("Anime", "Show", "retry")["done"], 2)
+
+    def test_confirmed_bytes_for_finalize_filter(self):
+        add(self.conn, "/m/Anime/Show/6.mkv", "Show", "confirmed", size=5000, new=1000)
+        show = [f for f in self.app.folders() if f["name"] == "Show"][0]
+        self.assertEqual(show["confirmed"], 1)
+        self.assertEqual(show["confirmed_bytes"], 5000)  # what Finalize frees
+
     def test_settings(self):
         self.assertTrue(self.app.set_paused(True)["paused"])
+        self.assertFalse(self.app.set_paused(False)["paused"])  # pause is module-wide in rx_search: undo it
         self.assertEqual(self.app.set_parallel(0)["parallel"], 1)
         self.assertEqual(self.app.set_folder("Anime", "Show", priority=4)["priority"], 4)
 

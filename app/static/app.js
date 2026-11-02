@@ -119,7 +119,17 @@
 
         // Search & Filter
         els.q.addEventListener('input', debounce(renderFolders, 300));
-        els.filter.addEventListener('change', renderFolders);
+        // the chosen filter survives a reload; the series last opened stays in the list until the filter changes,
+        // so "Confirm all ready" (which takes it out of "Ready to confirm") does not make it vanish
+        try {
+            const f = localStorage.getItem('kk-reencoder-filter');
+            if (f && [...els.filter.options].some(o => o.value === f)) els.filter.value = f;
+        } catch (e) { /* private window */ }
+        els.filter.addEventListener('change', () => {
+            state.keepKey = null;
+            try { localStorage.setItem('kk-reencoder-filter', els.filter.value); } catch (e) { /* private window */ }
+            renderFolders();
+        });
         buildSortControls();
 
         // Detail dialog: detail.js opens it and wires the close button and the download link;
@@ -338,8 +348,10 @@
             fill.style.width = Math.min(100, job.percent || 0) + '%';
             bar.appendChild(fill);
 
-            const parts = [job.phase];
-            if (job.fps > 0) parts.push(Math.round(job.fps) + ' fps');
+            // while paused the job's ffmpeg is frozen (no CPU, no GPU): say so instead of a stale speed
+            const parts = [state.paused ? `paused (${job.phase})` : job.phase];
+            if (state.paused) card.classList.add('paused');
+            else if (job.fps > 0) parts.push(Math.round(job.fps) + ' fps');
             if (typeof job.eta_s === 'number' && job.eta_s > 0) parts.push(Math.ceil(job.eta_s / 60) + ' min left');
             if (typeof job.cpu_pct === 'number') parts.push((job.cpu_pct / 100).toFixed(1) + ' CPU cores');
             if (job.rss_bytes) parts.push(formatBytes(job.rss_bytes));
@@ -357,7 +369,7 @@
             els.notice.textContent = blocked;
             els.notice.hidden = false;
         } else if (state.paused) {
-            els.notice.textContent = 'Paused';
+            els.notice.textContent = 'Paused: running jobs are frozen and carry on where they were when you resume';
             els.notice.hidden = false;
         } else {
             els.notice.hidden = true;
@@ -450,6 +462,8 @@
             text.textContent = `${left} of ${folder.files} left · ~${formatBytes(toGo)} to go`;
         } else if (state === 'done') {
             text.textContent = `saved ${formatBytes(folder.original_bytes - folder.projected_bytes)}`;
+        } else if (state === 'finalize') {
+            text.textContent = `frees ${formatBytes(folder.confirmed_bytes || 0)}`;
         } else if (state === 'notstarted') {
             text.textContent = `${folder.files} file${folder.files === 1 ? '' : 's'}`;
         } else {
@@ -474,11 +488,8 @@
         }).sort(compareFolders);
 
         // Filter by state
-        const finalKeys = filteredKeys.filter(k => {
-            const f = state.foldersCache[k];
-            if (filterVal === 'all') return true;
-            return getFolderStateClass(f) === filterVal;
-        });
+        const finalKeys = filteredKeys.filter(k => k === state.keepKey || matchesFilter(state.foldersCache[k], filterVal));
+        updateFilterSum(filterVal, filteredKeys);
 
         // Reuse a card while nothing it shows has changed: rebuilding ~900 cards every poll froze phones
         // for about 2 s and swallowed taps.
@@ -610,6 +621,12 @@
         setStatusChip(statusChip, stateClass, folder);
         setStatusText(statusText, stateClass, folder);
         statusRow.append(statusChip, statusText);
+        if ((folder.failed || 0) > 0) {
+            const failedChip = document.createElement('span');
+            failedChip.className = 'status-chip failed';
+            failedChip.textContent = `${folder.failed} failed`;
+            statusRow.appendChild(failedChip);
+        }
 
         // "Encode queued" only while the marked series still has files to do; a finished series just shows Done
         // (the mark stays, so episodes added later are encoded too)
@@ -661,6 +678,8 @@
         div.addEventListener('click', (e) => {
             if (e.target.closest('button, input, label')) return;  // card buttons and checkboxes do their own thing
             if (e.target.closest('.folder')) {
+                state.keepKey = key;
+                KKDetail.focusStatus = { failed: 'failed', finalize: 'confirmed', ready: 'staged' }[els.filter.value] || null;
                 KKDetail.open(folder.library, folder.name, refreshFolders);
             }
         });
@@ -670,11 +689,42 @@
         return div;
     }
 
+    // "Ready to confirm", "Ready to finalize" and "Failed" match every series with such files, whatever else it has
+    function matchesFilter(f, filterVal) {
+        if (filterVal === 'all') return true;
+        if (filterVal === 'ready') return (f.staged || 0) > 0;
+        if (filterVal === 'finalize') return (f.confirmed || 0) > 0;
+        if (filterVal === 'failed') return (f.failed || 0) > 0;
+        return getFolderStateClass(f) === filterVal;
+    }
+
+    // one line above the list: how much the filtered series add up to
+    function updateFilterSum(filterVal, keys) {
+        const el = document.getElementById('filter-sum');
+        if (!el) return;
+        const fs = keys.map(k => state.foldersCache[k]).filter(f => matchesFilter(f, filterVal));
+        const n = fs.length, series = 'series';
+        const sum = (key) => fs.reduce((a, f) => a + (f[key] || 0), 0);
+        let text = '';
+        if (filterVal === 'finalize') {
+            text = n ? `${sum('confirmed')} confirmed files in ${n} ${series}. Finalize deletes their kept originals and frees ${formatBytes(sum('confirmed_bytes'))}. Open a series to finalize it.`
+                : 'Nothing confirmed is waiting to be finalized.';
+        } else if (filterVal === 'ready') {
+            text = n ? `${sum('staged')} re-encodes in ${n} ${series} are waiting for Confirm.` : 'Nothing is waiting for Confirm.';
+        } else if (filterVal === 'failed') {
+            text = n ? `${sum('failed')} files failed in ${n} ${series}. Open a series to see why each one failed and retry it.`
+                : 'No failed files.';
+        }
+        el.textContent = text;
+        el.hidden = !text;
+    }
+
     function getFolderStateClass(folder) {
         const f = folder || {};
         const left = (f.pending || 0) + (f.running || 0);
         const handled = (f.encoded || 0) + (f.predicted || 0) + (f.staged || 0) + (f.confirmed || 0) + (f.skipped || 0);
         if (f.staged > 0) return 'ready';
+        if (f.confirmed > 0) return 'finalize';
         if (f.files > 0 && f.skipped === f.files) return 'skipped';
         if (left === 0 && handled > 0) return 'done';
         if (handled > 0 && left > 0) return 'partial';
@@ -690,6 +740,9 @@
             case 'ready':
                 const s = folder.staged || 0;
                 chip.textContent = `Ready to confirm (${s})`;
+                break;
+            case 'finalize':
+                chip.textContent = `Ready to finalize (${folder.confirmed || 0})`;
                 break;
             case 'partial':
                 chip.textContent = 'Partly done';
@@ -713,6 +766,9 @@
             case 'ready':
                 const s = folder.staged || 0;
                 chip.textContent = `Ready to confirm (${s})`;
+                break;
+            case 'finalize':
+                chip.textContent = `Ready to finalize (${folder.confirmed || 0})`;
                 break;
             case 'partial':
                 chip.textContent = 'Partly done';

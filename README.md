@@ -27,7 +27,8 @@ The screenshots come from a real library. `docs/screenshots/shoot.mjs` takes the
 - **Hardware acceleration** via VAAPI, NVENC or CPU SVT-AV1.
 - **VMAF-proven quality** per file; nothing replaces the original without confirmation.
 - **Modes**: report (measure only), manual (tick series to encode), stage (encode next to original).
-- **Batch control**: pause, priorities, 1-5 encodes at once.
+- **Batch control**: pause (freezes running encodes and checks where they are; resume carries on), priorities, 1-5 encodes at once.
+- **Filters**: ready to confirm, ready to finalize (with what Finalize frees), failed (the reason per file, Retry), skipped, done.
 - **Queue**: see which series are encoded or measured next; drag to reorder (mouse or finger), send one to the front, take it out and put it back.
 - **Settings screen**: mode (report, manual, automatic), encodes at once, daily rescan, quality target and size limit, without editing the compose file.
 - **Staged copies** in a hidden `.reencoder` folder; Compare, Confirm, Undo, Finalize steps.

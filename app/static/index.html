@@ -78,8 +78,10 @@
                 <option value="notstarted">Not started</option>
                 <option value="partial">Partly done</option>
                 <option value="ready">Ready to confirm</option>
+                <option value="finalize">Ready to finalize</option>
                 <option value="done">Done</option>
                 <option value="skipped">Skipped</option>
+                <option value="failed">Failed</option>
             </select>
             <div class="viewsw">
                 <button id="view-grid" class="btn" aria-pressed="true"></button>
@@ -87,6 +89,7 @@
             </div>
         </nav>
 
+        <p id="filter-sum" role="status" hidden></p>
         <section id="folders"></section>
     </main>
 

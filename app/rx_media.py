@@ -230,6 +230,9 @@ def sample_cmd(src: str, dst: str, start: int, length: int, video_index: int) ->
     """
     return [
         "ffmpeg",
+        # AVI (packed B-frames) and some old files carry packets without timestamps, which a Matroska
+        # sample cannot hold ("Can't write packet with unknown timestamp"): let ffmpeg fill them in
+        "-fflags", "+genpts",
         "-ss", str(start),
         "-i", src,
         "-t", str(length),

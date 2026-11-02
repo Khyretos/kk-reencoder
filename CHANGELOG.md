@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Pause really pauses: the encodes and quality checks already running are frozen (SIGSTOP, no CPU or GPU work) and carry on where they were on resume; before, pause only kept new files from starting while running encodes went on for hours. A restart while paused stays paused.
+- New filters: "Ready to finalize" (confirmed files whose originals are still kept, with what Finalize frees per series and in total) and "Failed" (series with failed files; the reason per file in plain words, the full ffmpeg message one tap away, Retry per file or for the whole series). "Ready to confirm" now lists every series with files waiting, also when it has other states.
+- The chosen filter is remembered, and the series you opened stays in the list until you change the filter: after "Confirm all ready" and closing the window (also by clicking outside it) the series no longer vanishes from "Ready to confirm". Opening a series from a filter scrolls to its first failed, confirmed or ready file.
+- AVI files whose packets have no timestamps no longer fail at the sample cut (`-fflags +genpts`). "bad duration" says both lengths. Failure messages keep whole lines (a line cut in half read as the reason).
+- The server stays quiet when a browser hangs up during a poll.
+
 - 4K quality checks are scored at 1080p: two 4K VMAF checks at full size needed 1.4-1.7 GB each and were killed at the container's 3 GB limit (Monarch S01E01/E02). Failed files show the reason (first error line) instead of ffmpeg's last progress line.
 - Deploy with `docker-compose.yml` and `.env` only: the compose file works on its own (report mode on ./media, port 127.0.0.1:8080), every setting and host path is an env var with a default (`.env.example`), and GPU and proxy network go in `docker-compose.override.example.yml`. The media owner (`RX_UID`/`RX_GID`) is a build arg and the render group is added with `group_add` (`RX_RENDER_GID`) instead of a hardcoded 993. ffmpeg is pinned to BtbN's 2026-09-30 month-end build (8.1.3) and checked by sha256. `docker-compose.example.yml` is gone.
 - Skips explained: every skipped or failed file shows why under its status (also on phones), with the measured numbers when the quality search decided ("at VMAF 95 the AV1 copy would be 93% of the original size; the size limit is 90%"). Failures keep the real ffmpeg error instead of libva start-up lines; a killed ffmpeg says it most likely ran out of memory.

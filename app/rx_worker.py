@@ -259,7 +259,9 @@ def process(conn, f, cfg, run, probe=None, progress=None):
 
         dur_diff = abs(new_info["duration_s"] - info["duration_s"])
         if dur_diff > 2:
-            rx_db.set_result(conn, f["path"], status="failed", error="bad duration")
+            rx_db.set_result(conn, f["path"], status="failed",
+                             error=f"bad duration: the AV1 copy is {new_info['duration_s']:.0f} s long, "
+                                   f"the original {info['duration_s']:.0f} s")
             if os.path.exists(part):
                 os.remove(part)
             write_report(conn, lib, folder, cfg, in_media=False)

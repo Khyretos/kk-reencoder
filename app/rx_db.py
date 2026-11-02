@@ -340,7 +340,8 @@ def _folders(conn) -> List[Dict[str, Any]]:
                COALESCE(SUM(CASE WHEN f.status IN ('encoded', 'confirmed', 'staged', 'predicted') AND f.new_bytes IS NOT NULL
                                  THEN f.new_bytes ELSE f.size END), 0) AS projected_bytes,
                COALESCE(SUM(CASE WHEN f.status = 'staged' THEN COALESCE(f.new_bytes, 0)
-                                 WHEN f.status = 'confirmed' THEN f.size ELSE 0 END), 0) AS extra_bytes
+                                 WHEN f.status = 'confirmed' THEN f.size ELSE 0 END), 0) AS extra_bytes,
+               COALESCE(SUM(CASE WHEN f.status = 'confirmed' THEN f.size ELSE 0 END), 0) AS confirmed_bytes
         FROM files f LEFT JOIN folders d ON d.library = f.library AND d.name = f.folder
         GROUP BY f.library, f.folder
     """).fetchall()

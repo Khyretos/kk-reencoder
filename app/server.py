@@ -37,14 +37,27 @@ def make_server(app, host, port):
         def log_message(self, format, *args):
             pass  # Quiet log
 
+        def handle(self):
+            # The client (e.g. a browser aborting a poll) may hang up before
+            # we finish writing; that is not a server error, so stay quiet.
+            try:
+                super().handle()
+            except ConnectionError:
+                self.close_connection = True
+
         def _send_json(self, status_code, data):
             body = json.dumps(data).encode("utf-8")
-            self.send_response(status_code)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(status_code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+            except ConnectionError:
+                # Client disconnected (BrokenPipe / ConnectionReset): nothing
+                # to send it, and no point answering with a 500 either.
+                self.close_connection = True
 
         def _send_html(self, path, status_code=200):
             try:
