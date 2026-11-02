@@ -18,6 +18,7 @@ import rx_config
 import rx_db
 import rx_model
 import rx_scan
+import rx_search
 import rx_settings
 import rx_stage
 import rx_sys
@@ -147,9 +148,14 @@ class App:
         )
 
     def set_paused(self, paused: bool) -> Dict[str, Any]:
-        """Pause or unpause all processing."""
+        """Pause or unpause all processing: no new files start, and the encodes and quality checks already
+        running are frozen where they are (they carry on from there on resume)."""
         val = "1" if paused else "0"
         rx_db.set_state(self.conn, "paused", val)
+        if paused:
+            rx_search.pause_all()
+        else:
+            rx_search.resume_all()
         return self.status()
 
     def set_parallel(self, n: int) -> Dict[str, Any]:
@@ -223,6 +229,7 @@ class App:
         "undo": ("confirmed", rx_stage.undo, "staged"),
         "finalize": ("confirmed", rx_stage.finalize, "encoded"),
         "discard": ("staged", rx_stage.discard, "pending"),
+        "retry": ("failed", None, "pending"),  # a failed file goes back in the queue; nothing on disk to change
     }
 
     def file_action(self, path: str, action: str) -> Dict[str, Any]:
@@ -232,15 +239,22 @@ class App:
         row = rx_db.get_file(self.conn, path)
         if row is None:
             raise KeyError(path)
-        _, step, after = self.ACTIONS[action]
-        step(path)  # raises rx_stage.StageError when the files are not in the needed state
-        if action == "discard":
+        needs, step, after = self.ACTIONS[action]
+        if step is None:
+            if row["status"] != needs:
+                raise rx_stage.StageError(f"not {needs}: {path}")
+        else:
+            step(path)  # raises rx_stage.StageError when the files are not in the needed state
+        if action == "retry":
+            rx_db.set_result(self.conn, path, status=after, error=None, reason=None)
+        elif action == "discard":
             rx_db.set_result(self.conn, path, status=after, new_bytes=None, quality=None, vmaf=None,
                              codec_after=None, encoded_at=None, reason="discarded")
         else:
             rx_db.set_result(self.conn, path, status=after)
         try:
-            rx_worker.write_report(self.conn, row["library"], row["folder"], self.cfg, in_media=(action == "finalize"))
+            if action != "retry":
+                rx_worker.write_report(self.conn, row["library"], row["folder"], self.cfg, in_media=(action == "finalize"))
         except OSError as e:  # the swap is done; a report that cannot be written must not undo that
             print(f"report for {row['library']}/{row['folder']} not written: {e}", file=sys.stderr)
         return rx_db.get_file(self.conn, path)
@@ -256,6 +270,7 @@ class App:
             "discard": "staged",
             "undo": "confirmed",
             "finalize": "confirmed",
+            "retry": "failed",
         }.get(action)
 
         if required_status is None:

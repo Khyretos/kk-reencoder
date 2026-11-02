@@ -46,6 +46,9 @@ class Worker:
     def start(self) -> None:
         """Start the scheduler and scan threads."""
         rx_db.reset_running(self.conn)
+        if rx_db.get_state(self.conn, "paused", "0") == "1":
+            import rx_search
+            rx_search.pause_all()  # still paused after a restart: hold back the commands of any job
         self._start_scheduler_thread()
         self._start_scan_thread()
 

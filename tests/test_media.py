@@ -84,6 +84,9 @@ class Commands(unittest.TestCase):
         self.assertEqual(c[c.index("-map") + 1], "0:v:0")
         self.assertEqual(c[c.index("-c") + 1], "copy")
         self.assertEqual(c[-1], "/w/s.mkv")
+        # AVI packets without timestamps could not be muxed into the Matroska sample
+        self.assertEqual(c[c.index("-fflags") + 1], "+genpts")
+        self.assertLess(c.index("-fflags"), c.index("-i"))
 
     def test_reference_cmd_is_lossless(self):
         # VMAF needs a lossless decoded reference: a stream-copied h264 sample decodes with timing

@@ -16,6 +16,7 @@ import csv
 import io
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -53,6 +54,40 @@ def polite_cmd(cmd: List[str], threads: int = FFMPEG_THREADS) -> List[str]:
     return POLITE + out
 
 
+# Pause: every ffmpeg / ffprobe this module starts is listed here, so a pause can freeze the ones already running
+# (SIGSTOP: no CPU, no GPU work, nothing lost; SIGCONT carries on where they were). Before, pause only kept new files
+# from starting, and an encode that had begun ran on for hours.
+_procs_lock = threading.Lock()
+_procs: set = set()
+_go = threading.Event()  # set = running; cleared while paused (new commands wait for it)
+_go.set()
+
+
+def _signal_all(sig: int) -> None:
+    with _procs_lock:
+        for proc in list(_procs):
+            try:
+                os.killpg(proc.pid, sig)  # nice/ionice exec into ffmpeg, which leads its own process group
+            except (ProcessLookupError, PermissionError):
+                pass
+
+
+def pause_all() -> None:
+    """Freeze every running command and hold back new ones until resume_all()."""
+    _go.clear()
+    _signal_all(signal.SIGSTOP)
+
+
+def resume_all() -> None:
+    """Let frozen commands carry on and new ones start."""
+    _go.set()
+    _signal_all(signal.SIGCONT)
+
+
+def is_paused() -> bool:
+    return not _go.is_set()
+
+
 def describe_rc(rc: int) -> str:
     """A return code in words (negative: killed by that signal)."""
     if rc == -9:
@@ -78,12 +113,21 @@ def default_run(
     Returns:
         Tuple of (returncode, stdout_text, stderr_text).
     """
+    _go.wait()  # paused: the next step of a job waits here instead of starting
     proc = subprocess.Popen(
         polite_cmd(cmd),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        start_new_session=True,  # its own process group, so a pause reaches everything it started
     )
+    with _procs_lock:
+        _procs.add(proc)
+    if not _go.is_set():  # paused while it was being started
+        try:
+            os.killpg(proc.pid, signal.SIGSTOP)
+        except ProcessLookupError:
+            pass
     
     stdout_lines = []
     stderr_lines = []
@@ -125,8 +169,12 @@ def default_run(
         proc.wait()
         raise
         
+    finally:
+        with _procs_lock:
+            _procs.discard(proc)
+
     t_err.join()
-    
+
     return rc, "\n".join(stdout_lines), "\n".join(stderr_lines)
 
 
@@ -138,9 +186,15 @@ def getsize(path: str) -> int:
 def useful_tail(err: Optional[str], limit: int = 400) -> str:
     """The end of ffmpeg's stderr without the libva/VPL start-up lines, which say nothing about the failure."""
     lines = [l for l in (err or "").splitlines()
-             if l.strip() and not l.lstrip().startswith(("libva info:", "libva error: vaGetDriverNameByIndex", "frame=", "size="))
-             and "elapsed=" not in l]
-    return "\n".join(lines)[-limit:]
+             if l.strip() and "libva info:" not in l and "vaGetDriverNameByIndex" not in l
+             and not l.lstrip().startswith(("frame=", "size=")) and "elapsed=" not in l]
+    # whole lines from the end: a line cut in half ("I version 1.22.0") read as the reason on the page
+    out: List[str] = []
+    for l in reversed(lines):
+        if out and sum(len(x) + 1 for x in out) + len(l) > limit:
+            break
+        out.insert(0, l[-limit:])
+    return "\n".join(out)
 
 
 def _run_ok(run: Callable, cmd: List[str]) -> str:

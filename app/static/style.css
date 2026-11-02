@@ -1398,3 +1398,27 @@ span.status-chip.queued { background: #f15bb5; color: #1c1329; }
   .q-row.q-flash { animation: none; background: var(--q-tint); box-shadow: 0 0 0 2px var(--q-accent); }
   #rx-toast { transition: none; }
 }
+
+/* Ready to finalize (confirmed, original still kept), failed files, the filter's sum line, paused jobs */
+span.status-chip.finalize { color: var(--kk-lilac); font-weight: 600; }
+span.status-chip.failed { color: #f87171; }
+.folder.st-finalize { --st: #bf4eff; }
+.folder.st-ready { --st: #f3941f; }  /* waiting for Confirm wins */
+#filter-sum { margin: 4px 0 12px; padding: 8px 12px; border-radius: 10px; background: var(--kk-plum-2);
+  border-left: 4px solid var(--kk-orange); color: var(--kk-mist); font-size: 0.9rem; }
+#filter-sum[hidden] { display: none; }
+td details.st-error { margin-top: 4px; font-size: 0.78em; max-width: 34em; }
+td details.st-error summary { cursor: pointer; color: var(--kk-orange); }
+td details.st-error pre { white-space: pre-wrap; word-break: break-word; margin: 4px 0 0; padding: 6px 8px; border-radius: 6px;
+  background: var(--kk-night); color: var(--kk-mist); font-size: 0.95em; max-height: 14em; overflow: auto; }
+.jobcard.paused .bar .fill { animation: none; opacity: 0.55; }
+.jobcard.paused .job-info { color: var(--kk-orange); }
+@media (prefers-color-scheme: light) {
+  span.status-chip.failed { color: #b91c1c; }
+  .folder.st-finalize { --st: #7b2fb5; }
+  .folder.st-ready { --st: #8a5a00; }
+  #filter-sum { background: #ffffff; color: #1c1329; border: 1px solid #b9a3dc; border-left: 4px solid #8a5a00; }
+  td details.st-error pre { background: #f4eefc; color: #1c1329; }
+}
+#detail-body tr.focus-row td { background: rgba(243,148,31,.12); }
+@media (prefers-color-scheme: light) { #detail-body tr.focus-row td { background: #fde7cc; } }

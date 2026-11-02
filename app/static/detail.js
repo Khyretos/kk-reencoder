@@ -76,6 +76,16 @@ window.KKDetail = {
     const actionsEl = document.getElementById('detail-actions');
     actionsEl.innerHTML = '';
 
+    // Failed files: back in the queue in one go
+    const failedFiles = data.files.filter(f => f.status === 'failed');
+    if (failedFiles.length > 0) {
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = 'Retry failed (' + failedFiles.length + ')';
+      btn.onclick = () => this.bulkAction('retry', failedFiles);
+      actionsEl.appendChild(btn);
+    }
+
     // Staged files
     const stagedFiles = data.files.filter(f => f.status === 'staged');
     if (stagedFiles.length > 0) {
@@ -136,6 +146,17 @@ window.KKDetail = {
         small.className = 'st-reason';
         small.textContent = why;
         statusChip.appendChild(small);
+      }
+      if (file.status === 'failed' && this.cleanError(file.error).includes('\n')) {
+        // the whole message (ffmpeg's own lines) one tap away
+        const more = document.createElement('details');
+        more.className = 'st-error';
+        const sm = document.createElement('summary');
+        sm.textContent = 'Full message';
+        const pre = document.createElement('pre');
+        pre.textContent = this.cleanError(file.error);
+        more.append(sm, pre);
+        statusChip.appendChild(more);
       }
       tr.appendChild(statusChip);
 
@@ -213,6 +234,13 @@ window.KKDetail = {
           }
         };
         tdActions.appendChild(finalizeBtn);
+      } else if (file.status === 'failed') {
+        const retryBtn = document.createElement('button');
+        retryBtn.className = 'btn btn-small';
+        retryBtn.textContent = 'Retry';
+        retryBtn.title = 'Put this file back in the queue';
+        retryBtn.onclick = (ev) => this.action(file, 'retry', ev);
+        tdActions.appendChild(retryBtn);
       } else if (file.status === 'encoded' && file.codec_after) {
         // done: the comparison frames are kept, so the result can still be looked at
         const compareBtn = document.createElement('button');
@@ -222,8 +250,17 @@ window.KKDetail = {
         tdActions.appendChild(compareBtn);
       }
       tr.appendChild(tdActions);
+      tr.dataset.status = file.status;
       tbody.appendChild(tr);
     });
+
+    // opened from the Failed / Ready to finalize / Ready to confirm filter: show the first such file
+    const want = this.focusStatus;
+    const first = want && tbody.querySelector('tr[data-status="' + want + '"]');
+    if (first) {
+      first.classList.add('focus-row');
+      first.scrollIntoView({ block: 'center' });
+    }
   },
 
   // why a file was skipped or failed, in plain words
@@ -244,10 +281,22 @@ window.KKDetail = {
       const err = (file.error || '').trim();
       if (!err) return 'failed without a message';
       if (err === 'stopped') return 'stopped: the quality search or encode crashed or the service restarted';
-      // the first line says what happened (e.g. "ffmpeg killed (-9)..."), the rest is ffmpeg's own detail
-      return err.split('\n').filter(Boolean)[0].slice(0, 200);
+      const lines = this.cleanError(err).split('\n').filter(Boolean);
+      if (!lines.length) return 'failed, but ffmpeg logged only GPU start-up lines: Retry to try it again';
+      // known causes in plain words
+      if (/unknown timestamp/.test(err)) return 'the test sample could not be cut: the file has video packets without timestamps (fixed now: Retry)';
+      if (/-ref\.mkv/.test(err) && /Error opening input/.test(err)) return 'the reference sample for the quality check came out broken: Retry';
+      if (/^bad duration$/.test(err)) return 'the AV1 copy came out with a different length than the original, so it was not kept';
+      // the first line says what happened (e.g. "ffmpeg exit code 1"); ffmpeg's own last line usually says why
+      if (lines.length === 1) return lines[0].slice(0, 200);
+      return (lines[0].split(':')[0] + ': ' + lines[lines.length - 1].replace(/^\[[^\]]*\]\s*/, '')).slice(0, 200);
     }
     return '';
+  },
+
+  // ffmpeg's error without the GPU driver's start-up chatter, which says nothing about the failure
+  cleanError: function(err) {
+    return (err || '').split('\n').filter(l => l.trim() && !/libva info:|vaGetDriverNameByIndex/.test(l) && !/^I version/.test(l)).join('\n');
   },
 
   getStatusLabel: function(status) {
