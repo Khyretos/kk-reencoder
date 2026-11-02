@@ -49,6 +49,14 @@ class GpuVmaf(unittest.TestCase):
         self.assertIn("log_path=/w/l.csv", lavfi)
         self.assertEqual(rx_media.vmaf_cmd("/w/e.mkv", "/w/r.mkv", 3)[0], "ffmpeg")
 
+    def test_cmd_qsv_decode(self):
+        c = rx_media.vmaf_cmd("/w/e.mkv", "/w/r.mkv", 3, None, 1080, gpu=True, qsv_device="/dev/dri/renderD128")
+        self.assertLess(c.index("-hwaccel"), c.index("-i"))  # only the encode (first input) is decoded on the GPU
+        self.assertEqual(c[c.index("-c:v") + 1], "av1_qsv")
+        self.assertTrue(c[c.index("-lavfi") + 1].startswith("[0:v]hwdownload,format=p010le,"))
+        cpu = rx_media.vmaf_cmd("/w/e.mkv", "/w/r.mkv", 3, None, 1080, qsv_device="/dev/dri/renderD128")
+        self.assertNotIn("-hwaccel", cpu)  # the CPU check keeps decoding on the CPU
+
     def test_matching_first_score_switches_to_gpu(self):
         run = FakeRun(94.703496, 94.703496)
         self.assertEqual(rx_search._vmaf_score("e", "r", "l", INFO, CFG, run), 94.703496)

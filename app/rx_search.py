@@ -224,7 +224,8 @@ def _vmaf_score(enc: str, ref: str, log: str, info: Dict[str, Any], cfg: Dict[st
     threads, height = cfg["vmaf_threads"], info.get("height")
     if (cfg.get("vmaf_gpu", "auto") != "off" and _gpu_vmaf["ok"] is not False and (height or 0) >= GPU_MIN_HEIGHT
             and os.path.exists(rx_media.VMAF_GPU_FFMPEG)):
-        rc, _, err = run(rx_media.vmaf_cmd(enc, ref, threads, log, height, gpu=True))
+        qsv = cfg.get("device") if cfg.get("encoder") == "qsv" and cfg.get("hw_decode", True) else None
+        rc, _, err = run(rx_media.vmaf_cmd(enc, ref, threads, log, height, gpu=True, qsv_device=qsv))
         score = rx_media.parse_vmaf(err) if rc == 0 else None
         first = _gpu_vmaf["ok"] is None
         if first:

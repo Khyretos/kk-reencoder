@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- GPU VMAF: the A580 also decodes the AV1 test encode (QSV) before scoring it; identical scores, ~20% less CPU per check.
+
 - VMAF on the Intel GPU: built on the `kk-vmafx` base image (`RX_BASE_IMAGE=kk-vmafx:local`), quality checks are scored with VMAFx's libvmaf_sycl on the A580. It scores every frame (more exact than the CPU's every 4th) with bit-identical results to the CPU scoring every frame, for less CPU than the CPU's every 4th. The first GPU score of each start is checked against the CPU on the same sample; on a mismatch or a GPU error it stays on the CPU. Videos below 720p stay on the CPU (the GPU path cost more CPU there). Measured on 1080p episodes: same chosen quality and ratio, about 20% less CPU and faster. The status line under "Encoding now" says where checks are scored.
 
 - About 2.5x less CPU per quality search with the same result: the lossless reference of each sample (written once, read by every trial encode and VMAF run) is Ut Video for 8-bit sources and FFV Huffyuv for 10-bit ones instead of ffv1, which was slow to write and to read. Checked on real episodes: every trial score, the chosen quality and the size ratio came out identical; CPU per file 1442 -> 621 s (8-bit 1080p H.264) and 1702 -> 632 s (10-bit 1080p HEVC). libvmaf itself still runs on the CPU.
