@@ -204,6 +204,7 @@
 
         updateTiles(data.totals);
         updateSpace(data);
+        state.vmafOn = data.vmaf_on;
         updateSysLine(data.sys);
         updateJobList(data.jobs);
         updateNotice(data.blocked);
@@ -306,6 +307,8 @@
             ? `${formatBytes(sys.mem_bytes)} of ${formatBytes(sys.mem_limit)}` 
             : '-';
         let text = `Encoder: using ${cpuStr} of its ${Math.round(sys.cpus)}-core limit · memory ${memStr}`;
+        text += { gpu: ' · quality checks scored on the GPU', cpu: ' · quality checks scored on the CPU',
+                  checking: ' · GPU scoring: checked against the CPU at the first quality check' }[state.vmafOn] || '';
         if (state.scanning) {
             text += ' · scanning library…';
         }

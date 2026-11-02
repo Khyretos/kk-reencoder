@@ -411,7 +411,12 @@ VMAF_MAX_HEIGHT = 1080  # VMAF's default model is made for 1080p; 4K is scored a
 VMAF_SUBSAMPLE = 4
 
 
-def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None, height: Optional[int] = None) -> List[str]:
+# the kk-vmafx base image puts an ffmpeg with libvmaf_sycl (VMAF on an Intel Arc GPU) here; RX_VMAF_FFMPEG overrides
+VMAF_GPU_FFMPEG = os.environ.get("RX_VMAF_FFMPEG", "/opt/vmafx/bin/ffmpeg")
+
+
+def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None, height: Optional[int] = None,
+             gpu: bool = False, subsample: Optional[int] = None) -> List[str]:
     """Build VMAF comparison command.
 
     Args:
@@ -419,6 +424,10 @@ def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None, he
         ref: Reference file path.
         threads: Number of threads for VMAF analysis.
         log: Optional path to write VMAF CSV log.
+        gpu: score with libvmaf_sycl on the GPU (VMAF_GPU_FFMPEG). It always scores every frame: its n_subsample
+            above 1 is broken (scores ~99.9 for anything), and every frame on the GPU still costs less CPU than every
+            4th frame on the CPU.
+        subsample: CPU only, score every n-th frame (default VMAF_SUBSAMPLE).
 
     Returns:
         List of ffmpeg arguments.
@@ -426,12 +435,14 @@ def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None, he
     # 4K pairs held at full size (10-bit, two decoders, libvmaf's buffers) used 1.4-1.7 GB per check and the kernel
     # killed them at the container's memory limit: above 1080p both pictures are scaled down first
     scale = f"scale=-2:{VMAF_MAX_HEIGHT}:flags=bicubic," if height and height > VMAF_MAX_HEIGHT else ""
+    vmaf = "libvmaf_sycl" if gpu else "libvmaf"
+    n = 1 if gpu else (subsample or VMAF_SUBSAMPLE)
     lavfi = (f"[0:v]setpts=PTS-STARTPTS,{scale}format=yuv420p[d];[1:v]setpts=PTS-STARTPTS,{scale}format=yuv420p[r];"
-             f"[d][r]libvmaf=n_threads={threads}:n_subsample={VMAF_SUBSAMPLE}")
+             f"[d][r]{vmaf}=n_threads={threads}:n_subsample={n}")
     if log is not None:
         lavfi += ":log_fmt=csv:log_path=" + log
     return [
-        "ffmpeg",
+        VMAF_GPU_FFMPEG if gpu else "ffmpeg",
         "-nostdin",
         "-nostats",  # the score is logged at info level; progress lines only buried the real error
         "-i", encoded,

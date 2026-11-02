@@ -206,6 +206,44 @@ def _run_ok(run: Callable, cmd: List[str]) -> str:
     return err or ""
 
 
+# GPU VMAF: None until the first GPU score of this run has been compared with the CPU's, then True (use the GPU) or
+# False (stay on the CPU). Scores must match: the search picks the quality from them.
+_gpu_vmaf: Dict[str, Optional[bool]] = {"ok": None}
+GPU_TOLERANCE = 0.01
+# below 720p the GPU path cost more CPU than the CPU one (a 480p episode: 568 s against 101 s; the per-frame GPU
+# round trip dominates), so small videos stay on the CPU
+GPU_MIN_HEIGHT = 720
+
+
+def gpu_vmaf_state() -> Optional[bool]:
+    return _gpu_vmaf["ok"]
+
+
+def _vmaf_score(enc: str, ref: str, log: str, info: Dict[str, Any], cfg: Dict[str, Any], run: Callable) -> float:
+    """VMAF of enc against ref: on the GPU where it is available and proved to score like the CPU, else on the CPU."""
+    threads, height = cfg["vmaf_threads"], info.get("height")
+    if (cfg.get("vmaf_gpu", "auto") != "off" and _gpu_vmaf["ok"] is not False and (height or 0) >= GPU_MIN_HEIGHT
+            and os.path.exists(rx_media.VMAF_GPU_FFMPEG)):
+        rc, _, err = run(rx_media.vmaf_cmd(enc, ref, threads, log, height, gpu=True))
+        score = rx_media.parse_vmaf(err) if rc == 0 else None
+        first = _gpu_vmaf["ok"] is None
+        if first:
+            # first GPU score of this run: the CPU scores the same pair, every frame, and must agree
+            cpu = rx_media.parse_vmaf(_run_ok(run, rx_media.vmaf_cmd(enc, ref, threads, None, height, subsample=1)))
+            ok = score is not None and cpu is not None and abs(score - cpu) <= GPU_TOLERANCE
+            _gpu_vmaf["ok"] = ok
+            print(f"GPU VMAF check: gpu {score} cpu {cpu}: " + ("scoring on the GPU" if ok else "staying on the CPU")
+                  + ("" if rc == 0 else f" ({describe_rc(rc)}: {useful_tail(err, 200)})"), file=sys.stderr, flush=True)
+        if score is not None and _gpu_vmaf["ok"]:
+            return score
+        if rc != 0 and not first:  # a later GPU failure: this score comes from the CPU, the next one tries the GPU again
+            print(f"GPU VMAF failed ({describe_rc(rc)}: {useful_tail(err, 200)}), scored on the CPU", file=sys.stderr, flush=True)
+    score = rx_media.parse_vmaf(_run_ok(run, rx_media.vmaf_cmd(enc, ref, threads, log, height)))
+    if score is None:
+        raise RuntimeError("no VMAF score")
+    return score
+
+
 def _cut_samples(path: str, info: Dict[str, Any], starts: List[int], cfg: Dict[str, Any], run: Callable,
                  made: List[str], filter_name: Optional[str] = None) -> List[Tuple[int, str, str]]:
     """Cut each sample and make its lossless reference: [(start, sample, ref)]."""
@@ -232,11 +270,7 @@ def _trial(q: int, samples: List[Tuple[int, str, str]], info: Dict[str, Any], cf
         made += [enc, log]
         # the reference already carries the filter, so the sample encode must not apply it twice
         _run_ok(run, rx_media.sample_encode_cmd(ref, enc, cfg["encoder"], q, cfg["device"]))
-        err = _run_ok(run, rx_media.vmaf_cmd(enc, ref, cfg["vmaf_threads"], log, info.get("height")))
-        score = rx_media.parse_vmaf(err)
-        if score is None:
-            raise RuntimeError(f"no VMAF score for q={q}")
-        scores.append(score)
+        scores.append(_vmaf_score(enc, ref, log, info, cfg, run))
         ratios.append(getsize(enc) / max(1, getsize(sample)))
         text = open(log).read() if os.path.exists(log) else ""
         w = rx_stage.worst_time(text, float(start), fps)

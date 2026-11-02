@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import rx_config
 import rx_db
+import rx_media
 import rx_model
 import rx_scan
 import rx_search
@@ -84,7 +85,14 @@ class App:
             "parallel": max(1, min(5, int(rx_db.get_state(self.conn, "parallel", str(self.cfg.get("parallel", 2)))))),
             "totals": self.totals(),
             "last_scan": last_scan,
+            # where quality checks are scored: "gpu", "cpu", or "checking" until the GPU's first score is compared
+            "vmaf_on": self.vmaf_on(),
         }
+
+    def vmaf_on(self) -> str:
+        if self.cfg.get("vmaf_gpu", "auto") == "off" or not os.path.exists(rx_media.VMAF_GPU_FFMPEG):
+            return "cpu"
+        return {None: "checking", True: "gpu", False: "cpu"}[rx_search.gpu_vmaf_state()]
 
     def settings(self) -> Dict[str, Any]:
         """The settings the page can change, as the service uses them now."""
