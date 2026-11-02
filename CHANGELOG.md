@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- About 2.5x less CPU per quality search with the same result: the lossless reference of each sample (written once, read by every trial encode and VMAF run) is Ut Video for 8-bit sources and FFV Huffyuv for 10-bit ones instead of ffv1, which was slow to write and to read. Checked on real episodes: every trial score, the chosen quality and the size ratio came out identical; CPU per file 1442 -> 621 s (8-bit 1080p H.264) and 1702 -> 632 s (10-bit 1080p HEVC). libvmaf itself still runs on the CPU.
+
 - Pause really pauses: the encodes and quality checks already running are frozen (SIGSTOP, no CPU or GPU work) and carry on where they were on resume; before, pause only kept new files from starting while running encodes went on for hours. A restart while paused stays paused.
 - New filters: "Ready to finalize" (confirmed files whose originals are still kept, with what Finalize frees per series and in total) and "Failed" (series with failed files; the reason per file in plain words, the full ffmpeg message one tap away, Retry per file or for the whole series). "Ready to confirm" now lists every series with files waiting, also when it has other states.
 - The chosen filter is remembered, and the series you opened stays in the list until you change the filter: after "Confirm all ready" and closing the window (also by clicking outside it) the series no longer vanishes from "Ready to confirm". Opening a series from a filter scrolls to its first failed, confirmed or ready file.

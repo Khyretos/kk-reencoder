@@ -406,6 +406,9 @@ def encode_cmd(src: str, dst: str, encoder: str, q: int, device: Optional[str], 
 
 
 VMAF_MAX_HEIGHT = 1080  # VMAF's default model is made for 1080p; 4K is scored at 1080p (4x less memory and work)
+# every 4th frame is scored; every 8th saved some CPU but moved the scores up by 0.3-1.1 on real episodes, so the
+# search would have picked smaller, slightly worse encodes
+VMAF_SUBSAMPLE = 4
 
 
 def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None, height: Optional[int] = None) -> List[str]:
@@ -424,7 +427,7 @@ def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None, he
     # killed them at the container's memory limit: above 1080p both pictures are scaled down first
     scale = f"scale=-2:{VMAF_MAX_HEIGHT}:flags=bicubic," if height and height > VMAF_MAX_HEIGHT else ""
     lavfi = (f"[0:v]setpts=PTS-STARTPTS,{scale}format=yuv420p[d];[1:v]setpts=PTS-STARTPTS,{scale}format=yuv420p[r];"
-             f"[d][r]libvmaf=n_threads={threads}:n_subsample=4")
+             f"[d][r]libvmaf=n_threads={threads}:n_subsample={VMAF_SUBSAMPLE}")
     if log is not None:
         lavfi += ":log_fmt=csv:log_path=" + log
     return [
@@ -458,11 +461,16 @@ def parse_vmaf(text: str) -> Optional[float]:
 
 
 def source_reference_cmd(src: str, ref: str, start: int, length: int, video_index: int,
-                         filter: Optional[str] = None) -> List[str]:
-    """Lossless ffv1 reference decoded straight from the source (accurate seek), so a sample cut by
+                         filter: Optional[str] = None, ten_bit: bool = False) -> List[str]:
+    """Lossless reference decoded straight from the source (accurate seek), so a sample cut by
     stream copy that starts between keyframes cannot break the decode. With a filter (deband) the
     reference is the filtered picture: VMAF then measures only the compression loss, not the
-    intended clean-up."""
+    intended clean-up. It is written once per sample and read back by every trial encode and every
+    VMAF run, so the codec matters: ffv1 took ~24 s of CPU to write and ~21 s to read per 20 s of
+    1080p. Ut Video (8-bit sources) reads in ~2 s; it has no 10-bit mode, so 10-bit sources get
+    FFV Huffyuv, which keeps all 10 bits and reads in ~6 s. Both are lossless, so scores and the
+    chosen quality stay the same."""
+    codec = ["-c:v", "ffvhuff"] if ten_bit else ["-c:v", "utvideo", "-pix_fmt", "yuv420p"]
     return (["ffmpeg", "-nostdin", "-v", "error", "-ss", str(start), "-i", src, "-t", str(length),
              "-map", f"0:v:{video_index}", "-an", "-sn"] + filter_args(filter)
-            + ["-c:v", "ffv1", "-y", ref])
+            + codec + ["-y", ref])
