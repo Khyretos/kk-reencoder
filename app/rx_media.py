@@ -416,7 +416,7 @@ VMAF_GPU_FFMPEG = os.environ.get("RX_VMAF_FFMPEG", "/opt/vmafx/bin/ffmpeg")
 
 
 def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None, height: Optional[int] = None,
-             gpu: bool = False, subsample: Optional[int] = None) -> List[str]:
+             gpu: bool = False, subsample: Optional[int] = None, qsv_device: Optional[str] = None) -> List[str]:
     """Build VMAF comparison command.
 
     Args:
@@ -428,6 +428,8 @@ def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None, he
             above 1 is broken (scores ~99.9 for anything), and every frame on the GPU still costs less CPU than every
             4th frame on the CPU.
         subsample: CPU only, score every n-th frame (default VMAF_SUBSAMPLE).
+        qsv_device: with gpu, the A580 also decodes the AV1 encode (an av1_qsv encode is 10-bit p010): same scores to
+            the last digit, ~3-4 s less CPU per 20 s 1080p sample than dav1d on the CPU.
 
     Returns:
         List of ffmpeg arguments.
@@ -437,7 +439,9 @@ def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None, he
     scale = f"scale=-2:{VMAF_MAX_HEIGHT}:flags=bicubic," if height and height > VMAF_MAX_HEIGHT else ""
     vmaf = "libvmaf_sycl" if gpu else "libvmaf"
     n = 1 if gpu else (subsample or VMAF_SUBSAMPLE)
-    lavfi = (f"[0:v]setpts=PTS-STARTPTS,{scale}format=yuv420p[d];[1:v]setpts=PTS-STARTPTS,{scale}format=yuv420p[r];"
+    hw_in = gpu and qsv_device
+    download = "hwdownload,format=p010le," if hw_in else ""
+    lavfi = (f"[0:v]{download}setpts=PTS-STARTPTS,{scale}format=yuv420p[d];[1:v]setpts=PTS-STARTPTS,{scale}format=yuv420p[r];"
              f"[d][r]{vmaf}=n_threads={threads}:n_subsample={n}")
     if log is not None:
         lavfi += ":log_fmt=csv:log_path=" + log
@@ -445,6 +449,8 @@ def vmaf_cmd(encoded: str, ref: str, threads: int, log: Optional[str] = None, he
         VMAF_GPU_FFMPEG if gpu else "ffmpeg",
         "-nostdin",
         "-nostats",  # the score is logged at info level; progress lines only buried the real error
+    ] + (["-init_hw_device", f"qsv=hw:{qsv_device}", "-hwaccel", "qsv", "-hwaccel_output_format", "qsv",
+          "-c:v", "av1_qsv"] if hw_in else []) + [
         "-i", encoded,
         "-i", ref,
         "-lavfi", lavfi,
