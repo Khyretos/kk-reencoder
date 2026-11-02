@@ -122,6 +122,9 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     skip_hdr = parse_bool(env.get("RX_SKIP_HDR", "true"), True)
     # QSV only: decode and convert on the GPU as well (falls back to CPU decode per file when it fails)
     hw_decode = parse_bool(env.get("RX_HW_DECODE", "true"), True)
+    # VMAF on the Intel GPU (libvmaf_sycl from the kk-vmafx base image): "auto" uses it when that ffmpeg is there
+    # and its first score matches the CPU's, "off" never does
+    vmaf_gpu = "off" if env.get("RX_VMAF_GPU", "auto").strip().lower() in ("off", "false", "0", "no") else "auto"
     # off: once a series has its quality, later episodes skip the CPU check sample (mostly GPU work then)
     check_every_episode = parse_bool(env.get("RX_CHECK_EVERY_EPISODE", "true"), True)
 
@@ -176,6 +179,7 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         "search_per_folder": search_per_folder,
         "parallel": parallel,
         "hw_decode": hw_decode,
+        "vmaf_gpu": vmaf_gpu,
         "check_every_episode": check_every_episode,
         "filters": filters,
         "codecs": codecs,

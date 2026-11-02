@@ -8,6 +8,7 @@ services:
     build:
       context: .
       args:
+        RX_BASE_IMAGE: ${RX_BASE_IMAGE:-debian:trixie-slim}
         RX_UID: ${RX_UID:-1000}
         RX_GID: ${RX_GID:-1000}
     image: ${RX_IMAGE:-kk-reencoder:local}
@@ -33,6 +34,7 @@ services:
       RX_HW_DECODE: ${RX_HW_DECODE:-true}
       RX_PARALLEL: ${RX_PARALLEL:-2}
       RX_VMAF_THREADS: ${RX_VMAF_THREADS:-4}
+      RX_VMAF_GPU: ${RX_VMAF_GPU:-auto}
       RX_FFMPEG_THREADS: ${RX_FFMPEG_THREADS:-2}
       # quality
       RX_TARGET_VMAF: ${RX_TARGET_VMAF:-95}

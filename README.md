@@ -88,6 +88,8 @@ All of these go in `.env`; `.env.example` lists them with the host settings (`RX
 | `RX_FILTERS` | (none) | Optional CPU filters per library, e.g. `Anime=deband`. |
 | `RX_MAX_STAGED_GB` | `1000` | Pause staging if total exceeds this. |
 | `RX_VMAF_THREADS` | `4` | Threads for VMAF analysis. |
+| `RX_VMAF_GPU` | `auto` | With the `kk-vmafx` base image: score VMAF on the Intel GPU (libvmaf_sycl, every frame) for videos of 720p and up. The first GPU score of each start is compared with the CPU's on the same sample and the GPU is used only when they match; `off` keeps it on the CPU. |
+| `RX_BASE_IMAGE` | `debian:trixie-slim` | Build arg. `kk-vmafx:local` (build it in the [kk-vmafx](https://git.kreative-kompas.com/khyretos/kk-vmafx) repo first) adds the Intel GPU runtime and VMAFx's ffmpeg for GPU VMAF. |
 | `RX_FFMPEG_THREADS` | `2` | Threads per ffmpeg decoder, encoder and filter graph. ffmpeg otherwise starts one per host CPU, which overloads a CPU-limited container and can run it out of memory. |
 | `RX_SAMPLES` | `3` | Number of samples per file. |
 | `RX_SAMPLE_LEN` | `20` | Length of each sample in seconds. |
