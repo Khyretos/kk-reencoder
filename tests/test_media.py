@@ -101,8 +101,17 @@ class Commands(unittest.TestCase):
         self.assertEqual(c[0], "ffmpeg")
         self.assertLess(c.index("-ss"), c.index("-i"))
         self.assertEqual(c[c.index("-map") + 1], "0:v:1")
-        self.assertEqual(c[c.index("-c:v") + 1], "ffv1")
+        # lossless Ut Video in the 8-bit format VMAF compares: far less CPU than ffv1, same picture
+        self.assertEqual(c[c.index("-c:v") + 1], "utvideo")
+        self.assertEqual(c[c.index("-pix_fmt") + 1], "yuv420p")
         self.assertEqual(c[-1], "/w/r.mkv")
+        # Ut Video has no 10-bit mode: 10-bit sources keep every bit in FFV Huffyuv
+        c = x.source_reference_cmd("/m/a.mkv", "/w/r.mkv", 300, 20, 0, ten_bit=True)
+        self.assertEqual(c[c.index("-c:v") + 1], "ffvhuff")
+        self.assertNotIn("-pix_fmt", c)
+
+    def test_vmaf_scores_every_4th_frame(self):
+        self.assertIn("n_subsample=4", x.vmaf_cmd("/w/enc.mkv", "/w/ref.mkv", 3)[-4])
 
     def test_full_encode_cmd_mkv_keeps_everything(self):
         c = x.encode_cmd("/m/a.mkv", "/w/a.mkv", "qsv", 24, "/dev/dri/renderD128", 0)

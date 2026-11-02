@@ -216,7 +216,7 @@ def _cut_samples(path: str, info: Dict[str, Any], starts: List[int], cfg: Dict[s
         made += [sample, ref]
         _run_ok(run, rx_media.sample_cmd(path, sample, start, cfg["sample_len"], info.get("video_index", 0)))
         _run_ok(run, rx_media.source_reference_cmd(path, ref, start, cfg["sample_len"], info.get("video_index", 0),
-                                                   filter_name))
+                                                   filter_name, ten_bit=bool(info.get("ten_bit"))))
         out.append((start, sample, ref))
     return out
 
