@@ -116,7 +116,7 @@ class Worker:
                 continue
 
             # Mark as running
-            rx_db.set_result(self.conn, f["path"], status="running")
+            rx_db.set_result(self.conn, f["path"], status="running", reason=None)
 
             with self.lock:
                 self._jobs[f["path"]] = {

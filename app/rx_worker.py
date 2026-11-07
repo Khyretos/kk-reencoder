@@ -11,6 +11,7 @@ Re-exports:
 
 import json
 import os
+import sys
 
 import rx_db
 import rx_model
@@ -108,6 +109,11 @@ def make_frames(path, staged, info, worst, cfg, run):
     return times
 
 
+def _duration_ok(new_info, info):
+    """True when the AV1 copy is about as long as the original (at most 2 s apart)."""
+    return new_info is not None and abs(new_info["duration_s"] - info["duration_s"]) <= 2
+
+
 def process(conn, f, cfg, run, probe=None, progress=None):
     """
     Process one file row from the database.
@@ -139,12 +145,21 @@ def process(conn, f, cfg, run, probe=None, progress=None):
         rx_db.set_result(conn, f["path"], status="failed", error="unreadable")
         return
 
+    # an already small file is tried too, at near-lossless quality (kept only when the copy is smaller)
+    cfg = rx_model.file_cfg(info, cfg)
+
     # Step 2: Check existing quality or search
     if progress is not None:
         progress["phase"] = "checking"
     q = folder_quality(conn, lib, folder, cfg)
     if q is not None and cfg.get("check_every_episode", True):
-        vmaf, ratio, worst = check_quality(path, info, q, cfg, run, lib)
+        try:
+            vmaf, ratio, worst = check_quality(path, info, q, cfg, run, lib)
+        except RuntimeError as e:
+            # the quick check of the series' quality broke (a sample or reference that came out empty): the full
+            # search below cuts its own samples, so this file is not failed for it
+            print(f"quality check of {path} failed, doing a full search: {str(e)[:200]}", file=sys.stderr, flush=True)
+            vmaf, ratio, worst = 0.0, 1.0, []
         # Keep q only if it meets target criteria
         if vmaf >= cfg["target_vmaf"] - 1 and ratio <= cfg["max_ratio"]:
             pass  # keep q
@@ -221,6 +236,11 @@ def process(conn, f, cfg, run, probe=None, progress=None):
                                       cfg.get("filters", {}).get(lib), hw_decode=cfg.get("hw_decode", True), **hdr)
         rc, out, err = run(gpu_cmd, on_line=on_line)
         if rc != 0 and gpu_cmd != cmd:
+            block.clear()
+            rc, out, err = run(cmd, on_line=on_line)
+            gpu_cmd = cmd
+        if rc == 0 and gpu_cmd != cmd and not _duration_ok(probe(part), info):
+            # the GPU decoder dropped part of the video (a copy some seconds short): the CPU decode reads it all
             block.clear()
             rc, out, err = run(cmd, on_line=on_line)
         if rc != 0:

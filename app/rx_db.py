@@ -355,6 +355,10 @@ def _folders(conn) -> List[Dict[str, Any]]:
     return out
 
 
+# reason on a pending row that was put back with Retry: such rows are handed out before the normal order
+RETRY_REASON = "retry"
+
+
 def next_file(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
     """
     Get the next pending file to work on.
@@ -362,6 +366,16 @@ def next_file(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
     Returns:
         The first pending file (by path) of the first folder according to order_folders, or None.
     """
+    # a file put back with Retry goes first (the oldest retry first), unless its series is paused: otherwise it
+    # waited behind every pending file of every series before it in the order, which can be days
+    row = conn.execute("""
+        SELECT f.* FROM files f LEFT JOIN folders d ON d.library = f.library AND d.name = f.folder
+        WHERE f.status = 'pending' AND f.reason = ? AND COALESCE(d.paused, 0) = 0
+        ORDER BY f.updated ASC, f.path ASC LIMIT 1
+    """, (RETRY_REASON,)).fetchone()
+    if row is not None:
+        return dict(row)
+
     # Get ordered folders
     ordered_folders = rx_model.order_folders(folders(conn))
     

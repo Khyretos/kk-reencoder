@@ -90,7 +90,8 @@ def skip_reason(info: Dict[str, Any], cfg: Dict[str, Any]) -> Optional[str]:
 
     Returns:
         None if the file should be considered, otherwise a short reason string.
-        Checks in order: AV1 codec -> HDR -> codec not selected -> resolution too high -> bitrate already low.
+        Checks in order: AV1 codec -> Dolby Vision 5 -> HDR -> codec not selected -> resolution too high.
+        A low bitrate is no reason to skip any more (old rows with 'bitrate already low' are queued again by a scan).
     """
     # Check if already AV1
     if info.get('codec') == 'av1':
@@ -114,24 +115,38 @@ def skip_reason(info: Dict[str, Any], cfg: Dict[str, Any]) -> Optional[str]:
     if height > max_height:
         return 'resolution too high'
     
-    # Check bitrate
-    bitrate = info.get('bitrate_kbps')
-    if bitrate is not None:
-        # Determine band based on height
-        if height < 700:
-            band = 'sd'
-        elif height < 1000:
-            band = '720'
-        elif height < 1800:
-            band = '1080'
-        else:
-            band = '2160'
-        
-        min_kbps = cfg.get('min_kbps', {}).get(band, float('inf'))
-        if bitrate < min_kbps:
-            return 'bitrate already low'
-    
+    # a file that is already small for its resolution is NOT skipped: it is tried at near-lossless quality
+    # (see low_bitrate / SMALL_FILE_VMAF) and kept only when the AV1 copy still comes out smaller
     return None
+
+
+# a file whose bitrate is already low for its resolution is searched with this stricter VMAF target (visually
+# lossless), so the copy keeps everything the small original has; it is kept only if it is still smaller
+SMALL_FILE_VMAF = 97.0
+
+
+def low_bitrate(info: Dict[str, Any], cfg: Dict[str, Any]) -> bool:
+    """True when the file's bitrate is under the per-resolution min_kbps band (already a small file)."""
+    bitrate = info.get('bitrate_kbps')
+    if bitrate is None:
+        return False
+    height = info.get('height') or 0
+    if height < 700:
+        band = 'sd'
+    elif height < 1000:
+        band = '720'
+    elif height < 1800:
+        band = '1080'
+    else:
+        band = '2160'
+    return bitrate < cfg.get('min_kbps', {}).get(band, 0)
+
+
+def file_cfg(info: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """The settings for this one file: an already small file gets the near-lossless quality target."""
+    if low_bitrate(info, cfg) and cfg.get('target_vmaf', 0) < SMALL_FILE_VMAF:
+        return dict(cfg, target_vmaf=SMALL_FILE_VMAF)
+    return cfg
 
 
 # skip reasons that depend on the settings (not on the file alone): a later scan looks at these files again

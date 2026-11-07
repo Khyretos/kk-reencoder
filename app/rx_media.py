@@ -113,6 +113,8 @@ def probe(path: str) -> Optional[Dict[str, Any]]:
             ["nice", "-n", "19", "ionice", "-c", "3", "ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", path],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",  # tags in old files are not always UTF-8; that must not make the file unreadable
             timeout=60
         )
         if result.returncode != 0:
@@ -350,6 +352,10 @@ def encode_cmd(src: str, dst: str, encoder: str, q: int, device: Optional[str], 
     gpu_path = hw_decode and encoder == "qsv" and not filter
     if gpu_path:
         args.extend(["-hwaccel", "qsv", "-hwaccel_output_format", "qsv"])
+    if src.lower().endswith((".avi", ".wmv")):
+        # packed B-frames / packets without timestamps (as for the samples): without them the AV1 copy of
+        # Knights of the Zodiac S05 came out "0 s long"
+        args.extend(["-fflags", "+genpts"])
     args.extend(["-i", src])
 
     # Map video stream
