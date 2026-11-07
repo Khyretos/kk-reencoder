@@ -278,6 +278,7 @@ window.KKDetail = {
     };
     if (file.status === 'skipped' && file.reason) return plain[file.reason] || file.reason;
     if (file.status === 'pending' && file.reason === 'retry') return 'put back with Retry: it is next in the queue';
+    if (['staged', 'confirmed', 'encoded'].includes(file.status) && file.reason) return file.reason;
     if (file.status === 'failed') {
       const err = (file.error || '').trim();
       if (!err) return 'failed without a message';

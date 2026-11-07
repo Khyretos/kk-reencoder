@@ -190,7 +190,10 @@ class WorkerFallbacks(unittest.TestCase):
                 encodes.append("-hwaccel" in cmd)
             return run(cmd, timeout, on_line)
         f = rx_db.next_file(self.c)
-        w.process(self.c, f, self.cfg, counting, probe=probe)
+        import rx_media
+        from unittest import mock
+        with mock.patch.object(rx_media, "video_packets_after", return_value=True):  # the original has more video
+            w.process(self.c, f, self.cfg, counting, probe=probe)
         self.assertEqual(encodes, [True, False])
         self.assertEqual(rx_db.get_file(self.c, f["path"])["status"], "staged")
 

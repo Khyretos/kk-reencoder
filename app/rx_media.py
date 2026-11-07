@@ -11,6 +11,46 @@ import subprocess
 from typing import Any, Dict, List, Optional
 
 
+def stream_duration(st: Dict[str, Any]) -> Optional[float]:
+    """A stream's own length in seconds: its duration field, or Matroska's DURATION tag (hh:mm:ss.fffffffff)."""
+    try:
+        if st.get("duration") not in (None, "", "N/A"):
+            return float(st["duration"])
+    except (TypeError, ValueError):
+        pass
+    tag = (st.get("tags") or {}).get("DURATION") or (st.get("tags") or {}).get("duration")
+    if not tag:
+        return None
+    try:
+        h, m, sec = tag.split(":")
+        return int(h) * 3600 + int(m) * 60 + float(sec)
+    except ValueError:
+        return None
+
+
+def video_packets_after(path: str, t: float, video_index: int = 0, span: float = 30.0) -> bool:
+    """True when the file has video packets at or after t seconds (seeking, so a cut-off file says False).
+    Used to tell an AV1 copy that is short because the original is cut off (a download that stopped: nothing
+    left to read) from one that really lost video."""
+    try:
+        r = subprocess.run(
+            ["nice", "-n", "19", "ionice", "-c", "3", "ffprobe", "-v", "error", "-select_streams", f"v:{video_index}",
+             "-show_entries", "packet=pts_time", "-of", "csv=p=0", "-read_intervals", f"{max(0.0, t):.3f}%+{span:g}",
+             path],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+    except Exception:
+        return True  # cannot tell: assume there is more, so nothing short is ever kept by mistake
+    if r.returncode != 0:
+        return True
+    for line in r.stdout.splitlines():
+        try:
+            if float(line.strip().strip(",")) >= t - 0.5:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def parse_probe(probe: Dict[str, Any], size: int) -> Optional[Dict[str, Any]]:
     """Parse ffprobe JSON output and file size into a video info dict.
 
@@ -64,6 +104,12 @@ def parse_probe(probe: Dict[str, Any], size: int) -> Optional[Dict[str, Any]]:
         duration_s = float(duration_str)
     except (ValueError, TypeError):
         duration_s = 0.0
+    # the container's duration can be wrong (Black Clover / SPY x FAMILY episodes say 3600 s and are 24 min long;
+    # a Gen V episode's video stops after 9.5 min while its audio runs 48 min): the video stream's own length is
+    # what the samples and the length check must go by
+    v_dur = stream_duration(v)
+    if v_dur and (duration_s <= 0 or v_dur < duration_s - 2):
+        duration_s = v_dur
     
     # Bitrate: prefer format bit_rate, else calculate from size/duration
     bitrate_kbps = None
@@ -95,6 +141,8 @@ def parse_probe(probe: Dict[str, Any], size: int) -> Optional[Dict[str, Any]]:
         "size": size,
         "audio": len(audio_streams),
         "subs": len(sub_streams),
+        # subtitle streams ffmpeg does not know (codec "none"): copying them fails the whole encode, so they are left out
+        "bad_subs": [i for i, st in enumerate(sub_streams) if not st.get("codec_name") or st.get("codec_name") == "none"],
         "video_index": video_index,
     }
 
@@ -328,7 +376,7 @@ def hdr_args(colour: Optional[Dict[str, Any]], dv_profile: Optional[int]) -> Lis
 
 def encode_cmd(src: str, dst: str, encoder: str, q: int, device: Optional[str], video_index: int, filter: Optional[str] = None,
                hw_decode: bool = False, colour: Optional[Dict[str, Any]] = None,
-               dv_profile: Optional[int] = None) -> List[str]:
+               dv_profile: Optional[int] = None, bad_subs: Optional[List[int]] = None) -> List[str]:
     """Build full encoding command preserving all streams.
 
     Args:
@@ -364,6 +412,8 @@ def encode_cmd(src: str, dst: str, encoder: str, q: int, device: Optional[str], 
     # Map audio and subtitle streams conditionally
     args.extend(["-map", "0:a?"])
     args.extend(["-map", "0:s?"])
+    for i in bad_subs or []:
+        args.extend(["-map", f"-0:s:{i}"])
     
     # Map time track only for mkv
     if dst.endswith(".mkv"):
@@ -398,6 +448,10 @@ def encode_cmd(src: str, dst: str, encoder: str, q: int, device: Optional[str], 
     args.extend(new_enc_args)
     args.extend(hdr_args(colour, dv_profile))
     
+    # MPEG-TS cannot carry AV1 properly (and "The Wretched (2019).ts" is Matroska inside): the copy is Matroska
+    if dst.lower().endswith(".ts"):
+        args.extend(["-f", "matroska"])
+
     # Add mov_text subtitle codec for mp4/m4v
     if dst.endswith((".mp4", ".m4v")):
         args.extend(["-c:s", "mov_text"])

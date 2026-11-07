@@ -210,7 +210,7 @@ def process(conn, f, cfg, run, probe=None, progress=None):
 
         # Build encode command
         filters = cfg.get("filters", {}).get(lib, {})
-        hdr = {"colour": info.get("colour"), "dv_profile": info.get("dv_profile")}
+        hdr = {"colour": info.get("colour"), "dv_profile": info.get("dv_profile"), "bad_subs": info.get("bad_subs")}
         cmd = rx_media.encode_cmd(
             path, part, cfg["encoder"], q, cfg["device"],
             info.get("video_index", 0), cfg.get("filters", {}).get(lib), **hdr
@@ -239,7 +239,8 @@ def process(conn, f, cfg, run, probe=None, progress=None):
             block.clear()
             rc, out, err = run(cmd, on_line=on_line)
             gpu_cmd = cmd
-        if rc == 0 and gpu_cmd != cmd and not _duration_ok(probe(part), info):
+        if rc == 0 and gpu_cmd != cmd and not _duration_ok(probe(part), info) and rx_media.video_packets_after(
+                path, (probe(part) or {}).get("duration_s", 0) + 1, info.get("video_index", 0)):
             # the GPU decoder dropped part of the video (a copy some seconds short): the CPU decode reads it all
             block.clear()
             rc, out, err = run(cmd, on_line=on_line)
@@ -278,7 +279,13 @@ def process(conn, f, cfg, run, probe=None, progress=None):
             return
 
         dur_diff = abs(new_info["duration_s"] - info["duration_s"])
-        if dur_diff > 2:
+        cut_off = False
+        if new_info["duration_s"] < info["duration_s"] - 2 and not rx_media.video_packets_after(
+                path, new_info["duration_s"] + 1, info.get("video_index", 0)):
+            # the original itself stops there (a cut-off download: its header promises more than the file has):
+            # the copy holds everything there is to play, so it is kept, with a note
+            cut_off = True
+        if dur_diff > 2 and not cut_off:
             rx_db.set_result(conn, f["path"], status="failed",
                              error=f"bad duration: the AV1 copy is {new_info['duration_s']:.0f} s long, "
                                    f"the original {info['duration_s']:.0f} s")
@@ -316,7 +323,8 @@ def process(conn, f, cfg, run, probe=None, progress=None):
             vmaf=vmaf,
             new_bytes=new_size,
             encoded_at=now(),
-            reason=None
+            reason=(f"the original is cut off: its video ends at {new_info['duration_s']:.0f} s although the file "
+                    f"says {info['duration_s']:.0f} s; the copy has all of it") if cut_off else None
         )
 
         write_report(conn, lib, folder, cfg, in_media=False)

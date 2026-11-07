@@ -249,6 +249,10 @@ def _vmaf_score(enc: str, ref: str, log: str, info: Dict[str, Any], cfg: Dict[st
     return score
 
 
+# a lossless reference with no frames is a bare Matroska header (~600 bytes); one real frame is far bigger
+EMPTY_REF_BYTES = 16 * 1024
+
+
 def _cut_samples(path: str, info: Dict[str, Any], starts: List[int], cfg: Dict[str, Any], run: Callable,
                  made: List[str], filter_name: Optional[str] = None) -> List[Tuple[int, str, str]]:
     """Cut each sample and make its lossless reference: [(start, sample, ref)]."""
@@ -257,10 +261,21 @@ def _cut_samples(path: str, info: Dict[str, Any], starts: List[int], cfg: Dict[s
         sample = os.path.join(cfg["work_dir"], f"s{i}.mkv")
         ref = os.path.join(cfg["work_dir"], f"s{i}-ref.mkv")
         made += [sample, ref]
-        _run_ok(run, rx_media.sample_cmd(path, sample, start, cfg["sample_len"], info.get("video_index", 0)))
-        _run_ok(run, rx_media.source_reference_cmd(path, ref, start, cfg["sample_len"], info.get("video_index", 0),
-                                                   filter_name, ten_bit=bool(info.get("ten_bit"))))
-        out.append((start, sample, ref))
+        # a start where the original has no readable video (past the real end of a cut-off file, or a damaged
+        # stretch) gives a reference with no frames, which every later step reads as "End of file": try earlier
+        # starts before giving up
+        tries = [start] + [t for t in (start // 2, start // 4, 0) if t < start]
+        for t in dict.fromkeys(tries):
+            _run_ok(run, rx_media.sample_cmd(path, sample, t, cfg["sample_len"], info.get("video_index", 0)))
+            _run_ok(run, rx_media.source_reference_cmd(path, ref, t, cfg["sample_len"], info.get("video_index", 0),
+                                                       filter_name, ten_bit=bool(info.get("ten_bit"))))
+            if getsize(ref) >= EMPTY_REF_BYTES:
+                break
+            print(f"{path}: no readable video at {t} s for a quality sample, trying earlier", file=sys.stderr, flush=True)
+        else:
+            raise RuntimeError(f"the original has no readable video at {start} s or before it for a quality sample "
+                               f"(damaged or cut-off file?)")
+        out.append((t, sample, ref))
     return out
 
 

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Files that kept failing after Retry: the 16 left were looked at one by one. Most originals are damaged, and now get handled:
+  - A container that states the wrong length (Black Clover / SPY x FAMILY episodes say 3600 s for 24 min, JUJUTSU KAISEN 2736 s): the video stream's own length is used, so the quality samples land inside the video. A sample start with no readable video moves earlier instead of giving an empty reference ("Error opening input file sN-ref.mkv: End of file").
+  - Cut-off downloads (BEASTARS, Hokuto no Ken, Jack-of-All-Trades, Yozakura Family, Dark Summoner, Love Potion witch): the header promises more than the file has. When the original has no video after the copy's end, the copy holds all there is: it is kept for Compare with a note instead of failing with "bad duration".
+  - A subtitle stream ffmpeg does not know (codec "none", Go! Go! Loser Ranger!) is left out instead of failing the encode. A `.ts` original gets a Matroska copy (MPEG-TS cannot hold AV1; The Wretched).
+
 - Retry really redoes a file: a retried file is next in the queue (it used to wait behind every pending file of every series before it, which could be days), unless its series is paused.
 - Fixed the causes that made retried files fail again: a non-UTF-8 byte in ffmpeg's messages killed the reader of its output, so ffmpeg died half-way (AV1 copies seconds short, broken samples); ffprobe output with such bytes made a file unreadable. Full encodes of AVI/WMV get `-fflags +genpts` (the "0 s long" Knights of the Zodiac copies). A copy from the GPU decode that comes out shorter than the original is encoded again with the CPU decode before it counts as failed. A broken quick quality check falls back to a full search instead of failing the file. Names too long for the disk ("File name too long" on multi-episode files) are shortened in `.reencoder/` with a hash.
 - Already small files are no longer skipped ("bitrate already low"): they are searched at a near-lossless target (VMAF 97, or the target when that is higher) and kept only when the AV1 copy is smaller. The next scan puts the files skipped for this back in the queue.
