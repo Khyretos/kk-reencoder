@@ -30,6 +30,24 @@ def _final_dir(path: str) -> str:
     return os.path.join(parent, ".reencoder-final")
 
 
+NAME_MAX = 255  # bytes in one file name on ext4 / most file systems
+PART_EXTRA = len(".part")  # the encode writes "<staged stem>.part<ext>" first
+
+
+def _aside_name(prefix: str, name: str) -> str:
+    """prefix + name, shortened when it (or its .part name) would be longer than the file system allows:
+    the stem is cut and a hash of the full name keeps it unique (an "S01E01-E04 - ... + ... + ..." episode
+    name failed with "File name too long")."""
+    full = prefix + name
+    if len(full.encode("utf-8")) + PART_EXTRA <= NAME_MAX:
+        return full
+    stem, ext = os.path.splitext(name)
+    tag = "~" + hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
+    room = NAME_MAX - PART_EXTRA - len(prefix.encode("utf-8")) - len(ext.encode("utf-8")) - len(tag)
+    cut = stem.encode("utf-8")[:room].decode("utf-8", "ignore").rstrip()
+    return prefix + cut + tag + ext
+
+
 def staged_path(path: str) -> str:
     """Path for the staged (re-encoded) copy.
 
@@ -41,7 +59,7 @@ def staged_path(path: str) -> str:
     """
     dir_path = _reencoder_dir(path)
     name = os.path.basename(path)
-    return os.path.join(dir_path, "[reencoded] " + name)
+    return os.path.join(dir_path, _aside_name("[reencoded] ", name))
 
 
 def kept_path(path: str) -> str:
@@ -55,7 +73,7 @@ def kept_path(path: str) -> str:
     """
     dir_path = _reencoder_dir(path)
     name = os.path.basename(path)
-    return os.path.join(dir_path, "[original] " + name)
+    return os.path.join(dir_path, _aside_name("[original] ", name))
 
 
 def frames_dir(root: str, path: str) -> str:
@@ -303,3 +321,55 @@ def worst_time(csv_text: str, start: float, fps: float) -> Optional[float]:
         return None
     
     return start + worst_frame / fps
+
+
+def mark_final(path: str) -> None:
+    """Write the marker that says this file's original was deleted on purpose (the AV1 copy is the file now)."""
+    final_dir = _final_dir(path)
+    os.makedirs(final_dir, exist_ok=True)
+    open(os.path.join(final_dir, os.path.basename(path)), "w").close()
+
+
+def _drop_empty_aside(path: str) -> None:
+    d = _reencoder_dir(path)
+    try:
+        if os.path.isdir(d) and not os.listdir(d):
+            os.rmdir(d)
+    except OSError:
+        pass
+
+
+def reconcile(row: dict) -> Optional[str]:
+    """The status a staged/confirmed row should have after looking at the files on disk, or None when the
+    row already matches them (or the disk cannot be looked at). The page offered Finalize for rows marked
+    'confirmed' whose kept original was gone, and Finalize then failed with "expected 'confirmed', got 'none'".
+
+    - staged/confirmed in the database and the same on disk: None (nothing to change)
+    - the disk shows the other of staged/confirmed: that one
+    - the final marker is there: 'encoded'
+    - nothing set aside any more and the file in place is the AV1 copy (its size is the copy's size):
+      'encoded' (the original is already gone, so this is what Finalize would have done); the marker is written
+    - nothing set aside and the file in place is the original (its size is the original size): 'pending'
+      (the re-encode is gone; the file is measured and encoded again)
+    """
+    path, status = row["path"], row["status"]
+    if status not in ("staged", "confirmed"):
+        return None
+    if not os.path.isdir(os.path.dirname(path)):
+        return None  # the library is not mounted right now: never judge by a missing disk
+    now = state(path)
+    if now == status:
+        return None
+    if now in ("staged", "confirmed"):
+        return now
+    if now == "final":
+        return "encoded"
+    if not os.path.exists(path):
+        return None
+    size = os.path.getsize(path)
+    if row.get("new_bytes") is not None and size == row["new_bytes"] and size != row.get("size"):
+        mark_final(path)
+        _drop_empty_aside(path)
+        return "encoded"
+    _drop_empty_aside(path)
+    return "pending"

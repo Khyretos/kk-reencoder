@@ -52,10 +52,18 @@ class SkipReason(unittest.TestCase):
     def test_hdr(self):
         self.assertEqual(m.skip_reason(info(codec="hevc", hdr=True, height=2160, bitrate_kbps=20000), CFG), "HDR")
 
-    def test_low_bitrate(self):
-        self.assertEqual(m.skip_reason(info(bitrate_kbps=2000), CFG), "bitrate already low")
-        self.assertEqual(m.skip_reason(info(height=480, bitrate_kbps=800), CFG), "bitrate already low")
-        self.assertIsNone(m.skip_reason(info(height=480, bitrate_kbps=1200), CFG))
+    def test_low_bitrate_is_not_skipped_but_tried_near_lossless(self):
+        # Kees decides what is small enough: a small file is tried at a stricter target, kept only if smaller
+        self.assertIsNone(m.skip_reason(info(bitrate_kbps=2000), CFG))
+        self.assertIsNone(m.skip_reason(info(height=480, bitrate_kbps=800), CFG))
+        self.assertTrue(m.low_bitrate(info(bitrate_kbps=2000), CFG))
+        self.assertFalse(m.low_bitrate(info(height=480, bitrate_kbps=1200), CFG))
+        self.assertFalse(m.low_bitrate(info(bitrate_kbps=None), CFG))
+        cfg = dict(CFG, target_vmaf=95.0)
+        self.assertEqual(m.file_cfg(info(bitrate_kbps=2000), cfg)["target_vmaf"], m.SMALL_FILE_VMAF)
+        self.assertEqual(m.file_cfg(info(bitrate_kbps=9000), cfg)["target_vmaf"], 95.0)
+        self.assertEqual(m.file_cfg(info(bitrate_kbps=2000), dict(cfg, target_vmaf=99.0))["target_vmaf"], 99.0)
+        self.assertEqual(cfg["target_vmaf"], 95.0)  # the shared settings are not changed
 
     def test_codec_not_selected(self):
         self.assertEqual(m.skip_reason(info(codec="vp9"), CFG), "codec not selected")

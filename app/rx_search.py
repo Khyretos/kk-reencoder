@@ -117,6 +117,10 @@ def default_run(
     proc = subprocess.Popen(
         polite_cmd(cmd),
         text=True,
+        # ffmpeg prints file names and tags as raw bytes: one non-UTF-8 byte (0x81 in an old AVI tag) killed the
+        # stderr reader, the pipe closed, and ffmpeg died half-way (short or 0 s AV1 copies, broken samples)
+        encoding="utf-8",
+        errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         start_new_session=True,  # its own process group, so a pause reaches everything it started

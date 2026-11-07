@@ -295,8 +295,8 @@ def make_server(app, host, port):
                     self._send_json(200, result)
                 except KeyError:
                     self._send_json(404, {"error": "Not Found"})
-                except rx_stage.StageError:
-                    self._send_json(409, {"error": "Stage Error"})
+                except rx_stage.StageError as e:
+                    self._send_json(409, {"error": str(e) or "Stage Error"})
                 except ValueError:
                     self._send_json(400, {"error": "Invalid Action"})
                 except Exception as e:
@@ -315,8 +315,8 @@ def make_server(app, host, port):
                     self._send_json(200, result)
                 except KeyError:
                     self._send_json(404, {"error": "Not Found"})
-                except rx_stage.StageError:
-                    self._send_json(409, {"error": "Stage Error"})
+                except rx_stage.StageError as e:
+                    self._send_json(409, {"error": str(e) or "Stage Error"})
                 except ValueError:
                     self._send_json(400, {"error": "Invalid Action"})
                 except Exception as e:
@@ -337,8 +337,8 @@ def make_server(app, host, port):
                     self._send_json(200, result)
                 except KeyError:
                     self._send_json(404, {"error": "Not Found"})
-                except rx_stage.StageError:
-                    self._send_json(409, {"error": "Stage Error"})
+                except rx_stage.StageError as e:
+                    self._send_json(409, {"error": str(e) or "Stage Error"})
                 except ValueError:
                     self._send_json(400, {"error": "Invalid Parameters"})
                 except Exception as e:
@@ -409,9 +409,15 @@ def main():
     conn = rx_db.connect(cfg["db"])
     rx_settings.load(conn, cfg)
     worker = rx_pool.Worker(conn, cfg)
-    worker.start()
-
     app = App(conn, cfg, worker)
+    # rows that say staged/confirmed while the files on disk say otherwise (Finalize failed on them)
+    try:
+        fixed = app.heal_all()
+        if fixed:
+            print(f"{fixed} staged/confirmed rows did not match the disk and were fixed")
+    except Exception as e:  # never keep the service from starting
+        print(f"checking staged/confirmed rows against the disk failed: {e}")
+    worker.start()
 
     server = make_server(app, "0.0.0.0", cfg["port"])
     print(f"Serving on 0.0.0.0:{cfg['port']}")

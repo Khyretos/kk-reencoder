@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Retry really redoes a file: a retried file is next in the queue (it used to wait behind every pending file of every series before it, which could be days), unless its series is paused.
+- Fixed the causes that made retried files fail again: a non-UTF-8 byte in ffmpeg's messages killed the reader of its output, so ffmpeg died half-way (AV1 copies seconds short, broken samples); ffprobe output with such bytes made a file unreadable. Full encodes of AVI/WMV get `-fflags +genpts` (the "0 s long" Knights of the Zodiac copies). A copy from the GPU decode that comes out shorter than the original is encoded again with the CPU decode before it counts as failed. A broken quick quality check falls back to a full search instead of failing the file. Names too long for the disk ("File name too long" on multi-episode files) are shortened in `.reencoder/` with a hash.
+- Already small files are no longer skipped ("bitrate already low"): they are searched at a near-lossless target (VMAF 97, or the target when that is higher) and kept only when the AV1 copy is smaller. The next scan puts the files skipped for this back in the queue.
+- Finalize on a file listed as confirmed whose kept original is already gone no longer fails with "expected 'confirmed', got 'none'": at start-up and before every confirm/undo/finalize/discard the list is checked against the disk. The AV1 copy in place and no original: it counts as finalized. The original in place and no copy: back in the queue. A missing library folder is never judged.
+
 - GPU VMAF: the A580 also decodes the AV1 test encode (QSV) before scoring it; identical scores, ~20% less CPU per check.
 
 - VMAF on the Intel GPU: built on the `kk-vmafx` base image (`RX_BASE_IMAGE=kk-vmafx:local`), quality checks are scored with VMAFx's libvmaf_sycl on the A580. It scores every frame (more exact than the CPU's every 4th) with bit-identical results to the CPU scoring every frame, for less CPU than the CPU's every 4th. The first GPU score of each start is checked against the CPU on the same sample; on a mismatch or a GPU error it stays on the CPU. Videos below 720p stay on the CPU (the GPU path cost more CPU there). Measured on 1080p episodes: same chosen quality and ratio, about 20% less CPU and faster. The status line under "Encoding now" says where checks are scored.

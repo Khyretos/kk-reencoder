@@ -271,12 +271,13 @@ window.KKDetail = {
       'Dolby Vision profile 5': 'Dolby Vision profile 5 has no HDR10 picture underneath: re-encoding would get the colours wrong',
       'codec not selected': 'its codec (' + (file.codec_before || '?') + ') is not in the list of codecs to re-encode',
       'resolution too high': 'taller than the maximum height setting',
-      'bitrate already low': 'already a small file for its resolution: AV1 would barely save anything',
+      'bitrate already low': 'was skipped as an already small file; a rescan tries it again at near-lossless quality',
       'unreadable': 'ffprobe could not read the file (damaged or still copying?)',
       'no smaller encode at target quality': 'no encode reached the target quality below the size limit; changing the target or size limit in Settings tries it again',
       'encode not smaller': 'the whole AV1 file (audio counted too) was above the size limit; changing the size limit in Settings tries it again'
     };
     if (file.status === 'skipped' && file.reason) return plain[file.reason] || file.reason;
+    if (file.status === 'pending' && file.reason === 'retry') return 'put back with Retry: it is next in the queue';
     if (file.status === 'failed') {
       const err = (file.error || '').trim();
       if (!err) return 'failed without a message';
@@ -326,10 +327,10 @@ window.KKDetail = {
       });
       
       if (res.status === 409) {
-        const err = await res.text();
-        alert(err);
-        btn.disabled = false;
-        btn.textContent = action.charAt(0).toUpperCase() + action.slice(1);
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'This file is not in the state for that action.');
+        this.fetchReport();  // the list may have been fixed to match the disk
+        if (this.onChange) this.onChange();
         return;
       }
       

@@ -240,6 +240,33 @@ class App:
         "retry": ("failed", None, "pending"),  # a failed file goes back in the queue; nothing on disk to change
     }
 
+    def heal(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        """Bring one staged/confirmed row in line with the files on disk; returns the (updated) row."""
+        new = rx_stage.reconcile(row)
+        if new is None:
+            return row
+        path = row["path"]
+        if new == "pending":
+            rx_db.set_result(self.conn, path, status="pending", new_bytes=None, quality=None, vmaf=None,
+                             codec_after=None, encoded_at=None, reason=None, error=None)
+        else:
+            rx_db.set_result(self.conn, path, status=new)
+        print(f"{path}: database said {row['status']}, the files on disk say {new}: fixed", file=sys.stderr, flush=True)
+        try:
+            rx_worker.write_report(self.conn, row["library"], row["folder"], self.cfg)
+        except (OSError, ValueError) as e:
+            print(f"report for {row['library']}/{row['folder']} not written: {e}", file=sys.stderr)
+        return rx_db.get_file(self.conn, path)
+
+    def heal_all(self) -> int:
+        """heal() every staged and confirmed row (at start-up); returns how many were changed."""
+        n = 0
+        for status in ("staged", "confirmed"):
+            for row in rx_db.files_with_status(self.conn, status):
+                if self.heal(row)["status"] != status:
+                    n += 1
+        return n
+
     def file_action(self, path: str, action: str) -> Dict[str, Any]:
         """Confirm, undo, finalize or discard one re-encode; returns the updated row."""
         if action not in self.ACTIONS:
@@ -248,13 +275,22 @@ class App:
         if row is None:
             raise KeyError(path)
         needs, step, after = self.ACTIONS[action]
+        if step is not None and row["status"] in ("staged", "confirmed"):
+            healed = self.heal(row)
+            if healed["status"] != row["status"]:
+                if action == "finalize" and healed["status"] == "encoded":
+                    return healed  # the original was already gone: the file is as Finalize leaves it
+                raise rx_stage.StageError(
+                    f"this file was {row['status']} in the list but the files on disk say "
+                    f"{healed['status']}; the list is fixed now, look again")
+            row = healed
         if step is None:
             if row["status"] != needs:
                 raise rx_stage.StageError(f"not {needs}: {path}")
         else:
             step(path)  # raises rx_stage.StageError when the files are not in the needed state
         if action == "retry":
-            rx_db.set_result(self.conn, path, status=after, error=None, reason=None)
+            rx_db.set_result(self.conn, path, status=after, error=None, reason=rx_db.RETRY_REASON)
         elif action == "discard":
             rx_db.set_result(self.conn, path, status=after, new_bytes=None, quality=None, vmaf=None,
                              codec_after=None, encoded_at=None, reason="discarded")
@@ -284,6 +320,12 @@ class App:
         if required_status is None:
             raise ValueError(f"Unknown action: {action}")
 
+        if required_status in ("staged", "confirmed"):
+            # first make the list match the disk, so rows that only looked ready are not counted as failures
+            for status in ("staged", "confirmed"):
+                for row in rx_db.files_with_status(self.conn, status, library, folder):
+                    if self.heal(row)["status"] == "encoded" and action == "finalize":
+                        done += 1  # its original was already gone: it is finalized now
         files = rx_db.files_with_status(self.conn, required_status, library, folder)
         for f in files:
             try:
