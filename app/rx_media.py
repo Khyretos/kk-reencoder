@@ -23,9 +23,12 @@ def stream_duration(st: Dict[str, Any]) -> Optional[float]:
         return None
     try:
         h, m, sec = tag.split(":")
-        return int(h) * 3600 + int(m) * 60 + float(sec)
+        h, m, sec = int(h), int(m), float(sec)
     except ValueError:
         return None
+    if h < 0 or not 0 <= m < 60 or not 0 <= sec < 60:
+        return None  # not a real hh:mm:ss tag: no length rather than a wrong one
+    return h * 3600 + m * 60 + sec
 
 
 def video_packets_after(path: str, t: float, video_index: int = 0, span: float = 30.0) -> bool:

@@ -68,6 +68,7 @@ class RealFiles(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.mkdtemp()
+        cls.addClassCleanup(shutil.rmtree, cls.tmp, True)  # also when setUpClass fails half-way
         cls.full = os.path.join(cls.tmp, "full.mkv")
         subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=24", "-t", "60",
                         "-c:v", "libx264", "-preset", "ultrafast", "-g", "48", "-y", cls.full], check=True)
@@ -75,10 +76,6 @@ class RealFiles(unittest.TestCase):
         data = open(cls.full, "rb").read()
         with open(cls.cut, "wb") as f:
             f.write(data[: len(data) // 2])
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmp)
 
     def test_video_packets_after(self):
         self.assertTrue(rx_media.video_packets_after(self.full, 50))
