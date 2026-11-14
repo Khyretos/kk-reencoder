@@ -18,7 +18,7 @@ class Config(unittest.TestCase):
         c = server.config_from_env({"RX_ROOTS": "/media/Anime,/media/Movies"})
         self.assertEqual(c["roots"], ["/media/Anime", "/media/Movies"])
         self.assertEqual(c["mode"], "report")
-        self.assertEqual(c["encoder"], "qsv")
+        self.assertEqual(c["encoder_pref"], "auto")  # found and tested at start-up (rx_hw)
         self.assertEqual(c["target_vmaf"], 95.0)
         self.assertEqual(c["max_ratio"], 0.95)
         self.assertEqual(c["samples"], 3)

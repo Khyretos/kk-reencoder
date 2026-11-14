@@ -29,6 +29,7 @@ FIELDS: Dict[str, Tuple[type, Callable[[Any], bool]]] = {
     "max_staged_gb": (float, lambda x: 1 <= x <= 100000),
     "hw_decode": (bool, lambda x: True),
     "vmaf_gpu": (str, lambda x: x in ("auto", "off")),
+    "encoder_pref": (str, lambda x: x in ("auto", "qsv", "vaapi", "nvenc", "svt")),
 }
 
 
@@ -40,6 +41,8 @@ def current(cfg: Dict[str, Any]) -> Dict[str, Any]:
             out[name] = True
     if out["vmaf_gpu"] is None:
         out["vmaf_gpu"] = "auto"
+    if out["encoder_pref"] is None:
+        out["encoder_pref"] = cfg.get("encoder") or "auto"
     out["codecs"] = list(out["codecs"] or [])
     return out
 

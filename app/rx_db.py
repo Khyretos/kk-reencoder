@@ -563,3 +563,24 @@ def skip_excluded(conn, codecs, max_height: int) -> int:
             n += 1
     conn.commit()
     return n
+
+
+def queue_measured(conn, mode: str, library: Optional[str] = None, folder: Optional[str] = None) -> int:
+    """Files measured only ('predicted': measured in Report mode, or in Manual mode while their series was not
+    ticked) go back in the queue to be encoded when that is what the mode now asks for: every such file in
+    Automatic ('stage'), the ones in ticked series in Manual. Report mode leaves them as they are.
+    Returns how many were queued."""
+    if mode not in ("stage", "manual"):
+        return 0
+    sql = ("UPDATE files SET status = 'pending', reason = NULL, error = NULL WHERE status = 'predicted'")
+    args: list = []
+    if mode == "manual":
+        sql += (" AND EXISTS (SELECT 1 FROM folders d WHERE d.library = files.library AND d.name = files.folder"
+                " AND d.encode = 1)")
+    if library is not None and folder is not None:
+        sql += " AND library = ? AND folder = ?"
+        args += [library, folder]
+    n = conn.execute(sql, tuple(args)).rowcount
+    if n:
+        conn.commit()
+    return n

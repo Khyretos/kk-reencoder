@@ -22,6 +22,7 @@ import rx_stage
 import rx_pool
 import rx_sys as rx_sys
 import rx_settings
+import rx_hw
 
 
 def make_server(app, host, port):
@@ -360,6 +361,21 @@ def make_server(app, host, port):
                     self._send_json(500, {"error": str(e)})
                 return
 
+            if path == "/api/bulk":
+                action = data.get("action") if isinstance(data, dict) else None
+                items = data.get("folders") if isinstance(data, dict) else None
+                if not isinstance(items, list) or not all(isinstance(x, dict) and "library" in x and "folder" in x
+                                                          for x in items):
+                    self._send_json(400, {"error": "folders must be a list of {library, folder}"})
+                    return
+                try:
+                    self._send_json(200, app.bulk(action, items))
+                except ValueError as e:
+                    self._send_json(400, {"error": str(e)})
+                except Exception as e:
+                    self._send_json(500, {"error": str(e)})
+                return
+
             if path == "/api/queue":
                 order = data.get("order") if isinstance(data, dict) else None
                 if not isinstance(order, list) or not all(isinstance(x, dict) and "library" in x and "folder" in x for x in order):
@@ -408,6 +424,12 @@ def main():
 
     conn = rx_db.connect(cfg["db"])
     rx_settings.load(conn, cfg)
+    hw = rx_hw.detect(cfg)
+    print(f"encoder: {hw['name']}" + (f" on {hw['device']}" if hw["device"] else "")
+          + (f" (found: {', '.join(g['vendor'] for g in hw['gpus']) or 'no GPU'})" if hw["pref"] == "auto" else ""))
+    for t in hw["tried"]:
+        if not t["ok"]:
+            print(f"  {t['encoder']} {t['device'] or ''} did not work: {t['error']}")
     worker = rx_pool.Worker(conn, cfg)
     app = App(conn, cfg, worker)
     # rows that say staged/confirmed while the files on disk say otherwise (Finalize failed on them)

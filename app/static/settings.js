@@ -47,6 +47,10 @@
         help: 'Off: HDR10 and HLG videos are re-encoded too and stay HDR. Dolby Vision drops to its HDR10 picture; Dolby Vision profile 5 is always left alone.' },
     ] },
     { title: 'Hardware and storage', fields: [
+      { name: 'encoder_pref', label: 'Encoder', type: 'select', options: [
+        ['auto', 'Auto: find the GPU and test it'], ['qsv', 'Intel Quick Sync (Arc, Core Ultra)'],
+        ['vaapi', 'VA-API (AMD RX 7000+, Intel)'], ['nvenc', 'NVIDIA NVENC (RTX 40+)'], ['svt', 'CPU (SVT-AV1, slower)'],
+      ], help: 'Auto tries the GPUs the container can see and falls back to the CPU. The next file uses a change; one already encoding finishes as it started.' },
       { name: 'hw_decode', label: 'Decode on the GPU', type: 'checkbox',
         help: 'Intel QSV only: decode and scale on the GPU too. A file that fails falls back to the CPU by itself.' },
       { name: 'vmaf_gpu', label: 'Score quality on the GPU', type: 'select', options: [
@@ -147,7 +151,8 @@
   function fillAbout(s) {
     const rows = [
       ['Version', s.version ? 'v' + s.version : '—'],
-      ['Encoder', (s.encoder || '—') + (s.device ? ' · ' + s.device : '')],
+      ['Encoder in use', ((s.hardware && s.hardware.name) || s.encoder || '—') + (s.hardware && s.hardware.device ? ' · ' + s.hardware.device : '')],
+      ['GPUs found', ((s.hardware && s.hardware.gpus) || []).map(g => g.vendor + (g.node ? ' (' + g.node.split('/').pop() + ')' : '')).join(', ') || 'none (CPU only)'],
       ['Quality scored on', { gpu: 'GPU (VMAFx SYCL)', cpu: 'CPU (libvmaf)', checking: 'GPU, checked at the first quality check' }[s.vmaf_on] || '—'],
       ['Libraries', (s.libraries || []).join(', ') || '—'],
     ];

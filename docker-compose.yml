@@ -1,12 +1,17 @@
-# kk-reencoder: AV1 re-encoder with a web page. Works on its own: `docker compose up -d --build`,
-# then open http://127.0.0.1:8080. Every setting comes from .env (see .env.example); without one it
-# measures a ./media folder in report mode (nothing is changed). GPU, reverse-proxy network and
-# other host wiring go in docker-compose.override.yml; see docker-compose.override.example.yml.
+# Kreative Reencoder: AV1 re-encoder with a web page.
+#
+#   1. Put your media folder(s) under "volumes" below (or set RX_MEDIA_DIR in .env).
+#   2. docker compose up -d --build
+#   3. Open http://127.0.0.1:8080 and pick a mode in Settings (it starts in Report: measure only, nothing changes).
+#
+# Without cloning the repo: keep only this file and set RX_BUILD_CONTEXT=https://github.com/Khyretos/kk-reencoder.git
+# in .env (Compose builds straight from git). Every setting can come from .env (see .env.example); most can also
+# be changed on the Settings screen. GPU and reverse-proxy wiring: docker-compose.override.example.yml.
 # It has no login of its own: put it behind a sign-in before opening it to the network.
 services:
   reencoder:
     build:
-      context: .
+      context: ${RX_BUILD_CONTEXT:-.}
       args:
         RX_BASE_IMAGE: ${RX_BASE_IMAGE:-debian:trixie-slim}
         RX_UID: ${RX_UID:-1000}
@@ -15,9 +20,13 @@ services:
     restart: unless-stopped
     user: "${RX_UID:-1000}:${RX_GID:-1000}"
     volumes:
-      # the library; the container sees it as /media (read-write: re-encodes go into hidden .reencoder
-      # folders next to the originals)
+      # The library. Every folder directly under /media is one library (Movies, Series, Anime, ...).
+      # One host folder that holds them all:
       - ${RX_MEDIA_DIR:-./media}:/media
+      # ...or one line per folder, each mounted as its own library (then remove the line above):
+      # - /mnt/disk1/Movies:/media/Movies
+      # - /mnt/disk2/TV:/media/Series
+      # Read-write: re-encodes go into hidden .reencoder folders next to the originals until you finalize.
       - reencoder-data:/data     # database, comparison frames, reports, samples
     ports:
       - "${RX_BIND:-127.0.0.1}:${RX_HOST_PORT:-8080}:8080"
@@ -28,8 +37,9 @@ services:
       RX_CODECS: ${RX_CODECS:-h264,hevc,mpeg4,vc1,mpeg2video,wmv3,msmpeg4v3}
       RX_SKIP_HDR: ${RX_SKIP_HDR:-true}
       RX_MAX_HEIGHT: ${RX_MAX_HEIGHT:-2160}
-      # hardware
-      RX_ENCODER: ${RX_ENCODER:-qsv}
+      # hardware: auto finds an Intel, AMD or NVIDIA GPU passed in (see the override example) and tests it,
+      # else uses the CPU (SVT-AV1)
+      RX_ENCODER: ${RX_ENCODER:-auto}
       RX_DEVICE: ${RX_RENDER_DEVICE:-/dev/dri/renderD128}
       RX_HW_DECODE: ${RX_HW_DECODE:-true}
       RX_PARALLEL: ${RX_PARALLEL:-2}
