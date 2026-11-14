@@ -19,7 +19,7 @@ Main repository: [git.kreative-kompas.com/khyretos/kk-reencoder](https://git.kre
 | <img src="docs/screenshots/05-light.png" alt="Light theme" width="45%"> | <img src="docs/screenshots/06-phone.png" alt="On a phone" width="45%"> |
 | Light theme | On a phone |
 
-The screenshots come from a real library. `docs/screenshots/shoot.mjs` takes them again from a running instance.
+The library, overview, light and phone screenshots show demo data; series and compare come from a real library. `docs/screenshots/shoot.mjs` takes them again from a running instance.
 
 ## Features
 
@@ -30,7 +30,9 @@ The screenshots come from a real library. `docs/screenshots/shoot.mjs` takes the
 - **Batch control**: pause (freezes running encodes and checks where they are; resume carries on), priorities, 1-5 encodes at once.
 - **Filters**: ready to confirm, ready to finalize (with what Finalize frees), failed (the reason per file, Retry), skipped, done.
 - **Queue**: see which series are encoded or measured next; drag to reorder (mouse or finger), send one to the front, take it out and put it back.
-- **Settings screen**: mode (report, manual, automatic), encodes at once, daily rescan, quality target and size limit, without editing the compose file.
+- **Progress per library**: how many files of each library are re-encoded (count and %), what is waiting for confirm, skipped or failed, and how much the re-encoded files saved.
+- **Clear run state**: Encoding / Paused / Idle / Offline in the header; while paused the button is an amber Resume and a banner says the running jobs are frozen.
+- **Settings screen**: mode, encodes at once, rescan interval, quality target and size limit, samples and sample length, source codecs, largest resolution, GPU decode, GPU quality scoring and staging space, without editing the compose file.
 - **Staged copies** in a hidden `.reencoder` folder; Compare, Confirm, Undo, Finalize steps.
 - **Safety**: originals are never deleted before Finalize; space guard (`RX_MAX_STAGED_GB`).
 - **Reports**: `encoding_report.json` per series; overview with charts; live CPU/memory per job.

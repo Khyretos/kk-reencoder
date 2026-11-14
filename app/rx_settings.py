@@ -8,6 +8,10 @@ from typing import Any, Callable, Dict, Tuple
 
 import rx_db
 
+# source codecs the Settings screen offers (ffprobe codec names)
+KNOWN_CODECS = ("h264", "hevc", "mpeg4", "vc1", "mpeg2video", "wmv3", "msmpeg4v3", "vp9", "vp8",
+                "mpeg1video", "wmv2", "msmpeg4v2")
+
 # name -> (type, range check)
 FIELDS: Dict[str, Tuple[type, Callable[[Any], bool]]] = {
     "mode": (str, lambda x: x in ("report", "manual", "stage")),
@@ -17,15 +21,26 @@ FIELDS: Dict[str, Tuple[type, Callable[[Any], bool]]] = {
     "target_vmaf": (float, lambda x: 80.0 <= x <= 100.0),
     "max_ratio": (float, lambda x: 0.3 <= x <= 0.99),
     "skip_hdr": (bool, lambda x: True),
+    "codecs": (list, lambda x: 0 < len(x) and all(c in KNOWN_CODECS for c in x)),
+    "max_height": (int, lambda x: 360 <= x <= 8192),
+    "samples": (int, lambda x: 1 <= x <= 10),
+    "sample_len": (int, lambda x: 5 <= x <= 60),
+    "search_per_folder": (int, lambda x: 1 <= x <= 10),
+    "max_staged_gb": (float, lambda x: 1 <= x <= 100000),
+    "hw_decode": (bool, lambda x: True),
+    "vmaf_gpu": (str, lambda x: x in ("auto", "off")),
 }
 
 
 def current(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """The value of every field as the service uses it now."""
     out = {name: cfg.get(name) for name in FIELDS}
-    for name in ("check_every_episode", "skip_hdr"):
+    for name in ("check_every_episode", "skip_hdr", "hw_decode"):
         if out[name] is None:
             out[name] = True
+    if out["vmaf_gpu"] is None:
+        out["vmaf_gpu"] = "auto"
+    out["codecs"] = list(out["codecs"] or [])
     return out
 
 
@@ -41,6 +56,12 @@ def parse(name: str, value: Any) -> Any:
             v = value.lower() in ("true", "1")
         else:
             raise ValueError(f"{name}: expected true or false")
+    elif kind is list:
+        if isinstance(value, str):  # stored as "h264,hevc"
+            value = [c for c in value.split(",") if c.strip()]
+        if not isinstance(value, list) or not all(isinstance(c, str) for c in value):
+            raise ValueError(f"{name}: expected a list")
+        v = [c.strip() for c in value]
     elif kind is str:
         if not isinstance(value, str):
             raise ValueError(f"{name}: expected text")
@@ -60,6 +81,8 @@ def parse(name: str, value: Any) -> Any:
 
 
 def _store(v: Any) -> str:
+    if isinstance(v, list):
+        return ",".join(v)
     return ("1" if v else "0") if isinstance(v, bool) else str(v)
 
 

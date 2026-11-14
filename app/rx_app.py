@@ -87,6 +87,9 @@ class App:
             "last_scan": last_scan,
             # where quality checks are scored: "gpu", "cpu", or "checking" until the GPU's first score is compared
             "vmaf_on": self.vmaf_on(),
+            "version": rx_config.VERSION,
+            "device": self.cfg.get("device"),
+            "libraries": [os.path.basename(r) for r in self.cfg.get("roots", [])],
         }
 
     def vmaf_on(self) -> str:
@@ -99,8 +102,16 @@ class App:
         return rx_settings.current(self.cfg)
 
     def set_settings(self, changes: Dict[str, Any]) -> Dict[str, Any]:
-        """Check, store and apply changed settings (ValueError on a bad value; nothing applied then)."""
-        return rx_settings.save(self.conn, self.cfg, changes)
+        """Check, store and apply changed settings (ValueError on a bad value; nothing applied then).
+        A change to which codecs or heights are re-encoded takes waiting files out at once and starts a scan,
+        which puts files back that the new setting lets in."""
+        before = rx_settings.current(self.cfg)
+        after = rx_settings.save(self.conn, self.cfg, changes)
+        if before["codecs"] != after["codecs"] or before["max_height"] != after["max_height"]:
+            rx_db.skip_excluded(self.conn, after["codecs"], after["max_height"])
+            if self.worker:
+                self.worker.request_scan()
+        return after
 
     TOTAL_KEYS = ("files", "pending", "encoded", "predicted", "staged", "confirmed", "skipped", "failed",
                   "original_bytes", "current_bytes", "projected_bytes", "extra_bytes")
@@ -351,8 +362,10 @@ class App:
         return {"pairs": pairs}
 
     def libraries(self) -> List[Dict[str, Any]]:
-        """Folder summaries summed per library, sorted by library."""
-        keys = ("files", "pending", "encoded", "predicted", "staged", "confirmed", "skipped",
+        """Folder summaries summed per library, sorted by library, plus how far each library is:
+        reencoded = files that have an AV1 copy (finalized, confirmed or waiting for Confirm), with the
+        size those files had before and what they take now (saved_bytes)."""
+        keys = ("files", "pending", "running", "encoded", "predicted", "staged", "confirmed", "skipped", "failed",
                 "original_bytes", "current_bytes", "projected_bytes", "extra_bytes")
         out: Dict[str, Dict[str, Any]] = {}
         for f in rx_db.folders(self.conn):
@@ -360,6 +373,17 @@ class App:
             lib["folders"] += 1
             for k in keys:
                 lib[k] += f.get(k) or 0
+        done = {r["library"]: r for r in self.conn.execute("""
+            SELECT library, COUNT(*) AS n, COALESCE(SUM(size), 0) AS before, COALESCE(SUM(new_bytes), 0) AS after
+            FROM files WHERE status IN ('encoded', 'confirmed', 'staged') AND new_bytes IS NOT NULL
+            GROUP BY library""").fetchall()}
+        for name, lib in out.items():
+            d = done.get(name)
+            lib["reencoded"] = lib["encoded"] + lib["confirmed"] + lib["staged"]
+            lib["reencoded_before_bytes"] = d["before"] if d else 0
+            lib["reencoded_after_bytes"] = d["after"] if d else 0
+            lib["saved_bytes"] = max(0, lib["reencoded_before_bytes"] - lib["reencoded_after_bytes"])
+            lib["reencoded_pct"] = round(lib["reencoded"] / lib["files"] * 100, 1) if lib["files"] else 0.0
         return [out[k] for k in sorted(out)]
 
     def overview(self) -> Dict[str, Any]:

@@ -8,17 +8,23 @@
     <link rel="icon" type="image/png" href="/static/favicon-32.png">
 </head>
 <body>
-    <header class="top">
-        <div class="brand">
+    <header class="top appbar">
+        <a class="brand" href="/" aria-label="Reencoder home">
             <picture>
                 <source media="(prefers-color-scheme: dark)" srcset="/static/logo-on-dark.svg">
                 <img src="/static/logo.svg" alt="">
             </picture>
             <span class="name">Reencoder</span>
-        </div>
-        <nav class="nav">
+            <span class="ver" id="ver"></span>
+        </a>
+        <nav class="nav tabs" aria-label="Pages">
             <a href="/" class="navlink">Library</a>
             <a href="/overview" class="navlink active" aria-current="page">Overview</a>
+        </nav>
+        <nav class="controls" aria-label="Encoder controls">
+            <span id="mode" class="badge"></span>
+            <span id="runstate" class="runstate" role="status" aria-live="polite"><i class="dot"></i><span class="rs-text">Connecting…</span></span>
+            <button id="pause" type="button" class="btn btn-run" aria-pressed="false"><span class="ico" aria-hidden="true"></span><span class="lbl">Pause</span></button>
         </nav>
     </header>
 
@@ -79,8 +85,10 @@
         </section>
     </main>
 
+    <script src="/static/shell.js" defer></script>
     <script src="/static/echarts.min.js" defer></script>
     <script src="/static/overview.js" defer></script>
     <script src="/static/fold.js" defer></script>
+    <script src="/static/settings.js" defer></script>
 </body>
 </html>

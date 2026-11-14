@@ -546,3 +546,20 @@ def requeue_reason(conn, reason: str) -> int:
                      (reason,)).rowcount
     conn.commit()
     return n
+
+
+def skip_excluded(conn, codecs, max_height: int) -> int:
+    """Waiting files whose codec is no longer selected or whose height is now above the limit are skipped
+    (with the same reasons a scan gives them, so a later scan can put them back)."""
+    n = 0
+    for r in conn.execute("SELECT path, codec, height FROM files WHERE status = 'pending'").fetchall():
+        reason = None
+        if r["codec"] is not None and r["codec"] not in codecs:
+            reason = "codec not selected"
+        elif (r["height"] or 0) > max_height:
+            reason = "resolution too high"
+        if reason:
+            conn.execute("UPDATE files SET status = 'skipped', reason = ? WHERE path = ?", (reason, r["path"]))
+            n += 1
+    conn.commit()
+    return n
