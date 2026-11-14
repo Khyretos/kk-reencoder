@@ -29,7 +29,7 @@
         tiles: document.querySelectorAll('#tiles .tile'),
         spaceFill: document.getElementById('space-fill'),
         spaceText: document.getElementById('space-text'),
-        libchart: document.getElementById('libchart'),
+        libprogress: document.getElementById('libprogress'),
         sysline: document.getElementById('sysline'),
         jobList: document.getElementById('job-list'),
         q: document.getElementById('q'),
@@ -97,10 +97,8 @@
     }
 
     function setupEventListeners() {
-        // Pause Toggle
-        els.pauseBtn.addEventListener('click', () => {
-            togglePause();
-        });
+        // Pause / Resume lives in the header (shell.js); it says when the state changed so we redraw the jobs
+        window.addEventListener('kk-status', () => pollStatus());
 
         // Parallel Input
         els.parallelInput.addEventListener('change', (e) => {
@@ -189,6 +187,7 @@
 
     async function pollStatus() {
         const data = await fetchJSON('/api/status');
+        if (window.KKShell) KKShell.apply(data);
         if (!data) return;
 
         state.lastPollTime = Date.now();
@@ -231,8 +230,8 @@
         }
         if (libs) {
             state.librariesCache = libs;
-            KKChart.render(els.libchart, libs);
-            setSum('chart', libs.map(l => `${l.library} ${formatBytes(l.original_bytes)} → ${formatBytes(l.projected_bytes)}`).join(' · '));
+            KKProgress.render(els.libprogress, libs);
+            setSum('progress', libs.map(l => `${l.library} ${KKProgress.pct(l.reencoded, l.files)}`).join(' · '));
         }
 
         renderFolders();
@@ -252,27 +251,31 @@
         const pct = (part, whole) => {
             if (!whole || !part) return '0%';
             const p = part / whole * 100;
-            return (p < 1 ? p.toFixed(2) : Math.round(p)) + '%';
+            return (p < 10 ? p.toFixed(1) : Math.round(p)) + '%';
         };
         const orig = totals.original_bytes || 0;
 
-        // Original library: what the library weighed before any re-encode
-        els.tiles[0].dataset.val = fmtBytes(orig);
-        els.tiles[0].dataset.sub = `${(totals.files || 0).toLocaleString()} files`;
+        // Re-encoded: files that have an AV1 copy (finalized, confirmed or waiting for Confirm)
+        const files = totals.files || 0;
+        const reenc = (totals.encoded || 0) + (totals.confirmed || 0) + (totals.staged || 0);
+        els.tiles[0].dataset.val = files ? pct(reenc, files) : '0%';
+        els.tiles[0].dataset.sub = `${reenc.toLocaleString()} of ${files.toLocaleString()} files`;
+        const meter = els.tiles[0].querySelector('.tile-meter > i');
+        if (meter) meter.style.width = (files ? Math.min(100, reenc / files * 100) : 0) + '%';
+
+        // Saved so far: only what Finalize really freed
+        els.tiles[1].dataset.val = fmtBytes(Math.max(0, totals.saved_bytes || 0));
+        els.tiles[1].dataset.sub = `${pct(Math.max(0, totals.saved_bytes || 0), orig)} of ${formatBytes(orig)}`;
 
         // On disk now: files in place plus copies waiting for Confirm / kept originals
         const extra = totals.extra_bytes || 0;
-        els.tiles[1].dataset.val = fmtBytes((totals.current_bytes || 0) + extra);
-        els.tiles[1].dataset.sub = extra > 0 ? `incl. ${formatBytes(extra)} waiting for confirm` : 'no copies waiting';
-
-        // Saved so far: only what Finalize really freed
-        els.tiles[2].dataset.val = fmtBytes(Math.max(0, totals.saved_bytes || 0));
-        els.tiles[2].dataset.sub = `${pct(Math.max(0, totals.saved_bytes || 0), orig)} of the library`;
+        els.tiles[2].dataset.val = fmtBytes((totals.current_bytes || 0) + extra);
+        els.tiles[2].dataset.sub = extra > 0 ? `incl. ${formatBytes(extra)} waiting for confirm` : 'no copies waiting';
 
         // Expected when done: measured files plus the rest estimated from them
         const est = totals.estimated_bytes != null ? totals.estimated_bytes : totals.projected_bytes;
         els.tiles[3].dataset.val = fmtBytes(est);
-        els.tiles[3].dataset.sub = `saves ${formatBytes(Math.max(0, orig - est))} (${pct(Math.max(0, orig - est), orig)}) · estimate from ${(totals.measured_files || 0).toLocaleString()} measured files`;
+        els.tiles[3].dataset.sub = `saves ~${formatBytes(Math.max(0, orig - est))} (${pct(Math.max(0, orig - est), orig)}) · from ${(totals.measured_files || 0).toLocaleString()} measured`;
         els.tiles.forEach(tile => {
             const v = tile.querySelector('.tile-value');
             const sub = tile.querySelector('.tile-sub');
@@ -342,7 +345,14 @@
             const pct = document.createElement('span');
             pct.className = 'job-pct';
             pct.textContent = Math.round(job.percent || 0) + '%';
-            head.append(folder, file, pct);
+            head.append(folder, file);
+            if (state.paused) {
+                const badge = document.createElement('span');
+                badge.className = 'job-badge';
+                badge.textContent = 'Paused';
+                head.append(badge);
+            }
+            head.append(pct);
 
             const bar = document.createElement('div');
             bar.className = 'bar running';
@@ -370,9 +380,6 @@
     function updateNotice(blocked) {
         if (blocked) {
             els.notice.textContent = blocked;
-            els.notice.hidden = false;
-        } else if (state.paused) {
-            els.notice.textContent = 'Paused: running jobs are frozen and carry on where they were when you resume';
             els.notice.hidden = false;
         } else {
             els.notice.hidden = true;
@@ -812,12 +819,6 @@
 
     // --- Actions ---
 
-    async function togglePause() {
-        const current = state.paused;
-        await post('/api/pause', { paused: !current });
-        // Force a quick poll to update UI immediately
-        await pollStatus();
-    }
 
     async function encodeSelected() {
         const foldersToEncode = [];
@@ -914,7 +915,7 @@
 
     // Update mode badge text
     function updateModeBadge() {
-        els.mode.textContent = { report: 'Report only', stage: 'Staging copies', manual: 'Manual: selected series only' }[state.mode] || '';
+        // the header (shell.js) shows the mode
     }
 
     // Update library chart labels to use folders count

@@ -7,7 +7,7 @@ const problems = [];
 const b = await chromium.launch();
 async function open(path) {
   const p = await b.newPage({ viewport: { width: 1300, height: 900 } });
-  p.on('pageerror', e => problems.push(`error: ${path === '/' ? 'app.js/detail.js/chart.js' : 'overview.js'}: ${e.message}`));
+  p.on('pageerror', e => problems.push(`error: ${path === '/' ? 'app.js/detail.js/progress.js' : 'overview.js'}: ${e.message}`));
   p.on('console', m => { if (m.type() === 'error') problems.push(`error: ${path === '/' ? 'app.js/detail.js' : 'overview.js'}: console: ${m.text().slice(0, 300)}`); });
   p.on('response', r => { if (r.status() >= 400) problems.push(`error: ${path}: ${r.status()} for ${r.url()}`); });
   await p.goto(base + path, { waitUntil: 'load' });
@@ -19,12 +19,12 @@ const tileValues = await lib.locator('#tiles .tile-value').allTextContents();
 if (tileValues.length !== 4 || tileValues.some(t => !/\d/.test(t))) problems.push(`error: app.js: tiles not filled (${JSON.stringify(tileValues)})`);
 const cards = await lib.locator('#folders .folder').count();
 if (cards < 1) problems.push('error: app.js: no .folder cards rendered in #folders');
-if ((await lib.locator('#libchart > *').count()) < 1) problems.push('error: chart.js: #libchart is empty');
+if ((await lib.locator('#libprogress > *').count()) < 1) problems.push('error: progress.js: #libprogress is empty');
 const libsApi = await (await fetch(base + '/api/libraries')).json();
-await lib.waitForTimeout(11000);  // the library chart redraws every 10 s
-const chartRows = await lib.locator('#libchart .kk-chart-row').count();
-if (chartRows !== libsApi.length) problems.push(`error: chart.js: #libchart has ${chartRows} rows for ${libsApi.length} libraries after a redraw`);
-if (!/Live/.test(await lib.locator('#conn').textContent())) problems.push('error: app.js: #conn does not say Live');
+await lib.waitForTimeout(11000);  // the library progress redraws every 10 s
+const rows = await lib.locator('#libprogress .lp-row:not(.lp-total)').count();
+if (rows !== libsApi.length) problems.push(`error: progress.js: #libprogress has ${rows} rows for ${libsApi.length} libraries after a redraw`);
+if (/Offline|Connecting/.test(await lib.locator('#runstate').textContent())) problems.push('error: shell.js: #runstate does not show a run state');
 if (cards) {
   await lib.locator('#folders .folder').first().click({ position: { x: 10, y: 10 } });
   await lib.waitForTimeout(1500);

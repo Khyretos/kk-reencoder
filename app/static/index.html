@@ -8,42 +8,45 @@
     <link rel="icon" type="image/png" href="/static/favicon-32.png">
 </head>
 <body>
-    <header class="top">
-        <div class="brand">
+    <header class="top appbar">
+        <a class="brand" href="/" aria-label="Reencoder home">
             <picture>
                 <source media="(prefers-color-scheme: dark)" srcset="/static/logo-on-dark.svg">
                 <img src="/static/logo.svg" alt="">
             </picture>
             <span class="name">Reencoder</span>
-        </div>
-        <nav class="controls">
+            <span class="ver" id="ver"></span>
+        </a>
+        <nav class="nav tabs" aria-label="Pages">
+            <a href="/" class="navlink active" aria-current="page">Library</a>
+            <a href="/overview" class="navlink">Overview</a>
+        </nav>
+        <nav class="controls" aria-label="Encoder controls">
             <span id="mode" class="badge"></span>
-            <button id="pause" class="btn btn-primary">Pause</button>
-            <label for="parallel">Encodes at once</label>
-            <input type="number" id="parallel" min="1" max="5">
-            <span id="conn" class="pill"></span>
-            <a href="/overview">Overview</a>
+            <span id="runstate" class="runstate" role="status" aria-live="polite"><i class="dot"></i><span class="rs-text">Connecting…</span></span>
+            <button id="pause" type="button" class="btn btn-run" aria-pressed="false"><span class="ico" aria-hidden="true"></span><span class="lbl">Pause</span></button>
         </nav>
     </header>
 
     <main>
         <section id="tiles">
-            <div class="tile">
-                <div class="tile-label">Original library</div>
+            <div class="tile t-progress">
+                <div class="tile-label">Re-encoded</div>
                 <div class="tile-value"></div>
                 <div class="tile-sub"></div>
+                <div class="tile-meter"><i></i></div>
             </div>
-            <div class="tile">
-                <div class="tile-label">On disk now</div>
-                <div class="tile-value"></div>
-                <div class="tile-sub"></div>
-            </div>
-            <div class="tile">
+            <div class="tile t-saved">
                 <div class="tile-label">Saved so far</div>
                 <div class="tile-value"></div>
                 <div class="tile-sub"></div>
             </div>
-            <div class="tile">
+            <div class="tile t-disk">
+                <div class="tile-label">On disk now</div>
+                <div class="tile-value"></div>
+                <div class="tile-sub"></div>
+            </div>
+            <div class="tile t-expected">
                 <div class="tile-label">Expected when done</div>
                 <div class="tile-value"></div>
                 <div class="tile-sub"></div>
@@ -52,23 +55,28 @@
 
         <div id="notice" role="status" hidden></div>
 
+        <section id="progress" class="card">
+            <h2>Progress per library</h2>
+            <div id="libprogress"></div>
+        </section>
+
+        <section id="jobs" class="card">
+            <h2>Encoding now</h2>
+            <div class="jobs-bar">
+                <p id="sysline"></p>
+                <label class="parallel-ctl" for="parallel">Encodes at once
+                    <input type="number" id="parallel" min="1" max="5">
+                </label>
+            </div>
+            <div id="job-list"></div>
+        </section>
+
         <section id="space" class="card">
             <h2>Space used by copies waiting for confirm</h2>
             <div class="bar">
                 <div id="space-fill" class="fill"></div>
             </div>
             <p id="space-text"></p>
-        </section>
-
-        <section id="chart" class="card">
-            <h2>Space per library</h2>
-            <div id="libchart"></div>
-        </section>
-
-        <section id="jobs" class="card">
-            <h2>Encoding now</h2>
-            <p id="sysline"></p>
-            <div id="job-list"></div>
         </section>
 
         <nav class="toolbar">
@@ -107,8 +115,9 @@
         </div>
     </dialog>
 
+    <script src="/static/shell.js" defer></script>
     <script src="/static/fold.js" defer></script>
-    <script src="/static/chart.js" defer></script>
+    <script src="/static/progress.js" defer></script>
     <script src="/static/compare.js" defer></script>
     <script src="/static/detail.js" defer></script>
     <script src="/static/app.js" defer></script>
