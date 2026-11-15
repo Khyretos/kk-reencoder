@@ -136,25 +136,7 @@
             if (e.target === els.detail) closeDetail();
         });
 
-        // Encode Selected Buttons (created once, after #filter)
-        if (!els.encodeSelectedBtn && els.filter) {
-            const enc = document.createElement('button');
-            enc.id = 'encode-selected';
-            enc.className = 'btn btn-primary';
-            enc.disabled = true;
-            enc.hidden = true;
-            enc.textContent = 'Encode selected';
-            const clr = document.createElement('button');
-            clr.id = 'clear-selected';
-            clr.className = 'btn';
-            clr.hidden = true;
-            clr.textContent = 'Clear';
-            els.filter.after(enc, clr);
-            els.encodeSelectedBtn = enc;
-            els.clearSelectedBtn = clr;
-        }
-        if (els.encodeSelectedBtn) els.encodeSelectedBtn.addEventListener('click', () => encodeSelected());
-        if (els.clearSelectedBtn) els.clearSelectedBtn.addEventListener('click', () => clearSelection());
+        buildBulkBar();
     }
 
     function startPolling() {
@@ -532,6 +514,7 @@
             els.folders.replaceChildren(...wanted);
         }
         state.lastKeys = finalKeys;
+        updateEncodeSelectedUI();
     }
 
     function createFolderElement(folder, key) {
@@ -543,8 +526,8 @@
         const header = document.createElement('div');
         header.className = 'folder-header';
 
-        // Checkbox for manual mode
-        if (state.mode === 'manual') {
+        // Checkbox: pick series for the bulk bar (Confirm, Finalize, Retry, Encode, Up next)
+        {
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.className = 'pick';
@@ -820,33 +803,133 @@
     // --- Actions ---
 
 
-    async function encodeSelected() {
-        const foldersToEncode = [];
-        state.selectedFolders.forEach(key => {
-            const f = state.foldersCache[key];
-            if (f) {
-                foldersToEncode.push({ library: f.library, folder: f.name });
-            }
+    // --- Bulk bar: one action on the series you picked, or on every series the filter shows ---
+
+    const BULK = [
+        // action, label, how many it touches in a series, ask first
+        ['confirm', 'Confirm ready', f => f.staged || 0],
+        ['finalize', 'Finalize', f => f.confirmed || 0, true],
+        ['retry', 'Retry failed', f => f.failed || 0],
+        ['retry_skipped', 'Retry skipped', f => f.skipped || 0],
+        ['encode', 'Encode', f => (state.mode === 'manual' && !f.encode) ? 1 : 0],
+        ['upnext', 'Up next', f => (f.pending || 0) > 0 ? 1 : 0],
+    ];
+
+    function buildBulkBar() {
+        const bar = document.createElement('div');
+        bar.id = 'bulkbar';
+        bar.setAttribute('role', 'toolbar');
+        bar.setAttribute('aria-label', 'Bulk actions');
+        const all = document.createElement('label');
+        all.className = 'bulk-all';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = 'select-all';
+        cb.addEventListener('change', () => {
+            if (cb.checked) (state.lastKeys || []).forEach(k => state.selectedFolders.add(k));
+            else state.selectedFolders.clear();
+            state.cardCache && state.cardCache.clear();
+            renderFolders();
+            updateEncodeSelectedUI();
         });
+        const lbl = document.createElement('span');
+        lbl.textContent = 'Select all shown';
+        all.append(cb, lbl);
+        const scope = document.createElement('span');
+        scope.className = 'bulk-scope';
+        const btns = document.createElement('div');
+        btns.className = 'bulk-btns';
+        BULK.forEach(([action, label]) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'btn bulk-' + action;
+            b.dataset.action = action;
+            b.dataset.label = label;
+            b.textContent = label;
+            b.addEventListener('click', () => runBulk(action));
+            btns.appendChild(b);
+        });
+        const clr = document.createElement('button');
+        clr.type = 'button';
+        clr.className = 'btn bulk-clear';
+        clr.textContent = 'Clear';
+        clr.addEventListener('click', () => clearSelection());
+        btns.appendChild(clr);
+        bar.append(all, scope, btns);
+        const sum = document.getElementById('filter-sum');
+        (sum || els.folders).before(bar);
+        els.bulkbar = bar;
+    }
 
-        if (foldersToEncode.length === 0) return;
+    // the series the bulk bar works on: the ticked ones, or (none ticked) every series the list shows
+    function bulkTargets() {
+        const picked = [...state.selectedFolders].filter(k => state.foldersCache[k]);
+        const keys = picked.length ? picked : (state.lastKeys || []);
+        return { picked: picked.length > 0, folders: keys.map(k => state.foldersCache[k]).filter(Boolean) };
+    }
 
-        await post('/api/encode', { folders: foldersToEncode, encode: true });
-        clearSelection();
+    async function runBulk(action) {
+        const t = bulkTargets();
+        const spec = BULK.find(b => b[0] === action);
+        const hit = t.folders.filter(f => spec[2](f) > 0);
+        if (!hit.length) return;
+        const files = hit.reduce((a, f) => a + spec[2](f), 0);
+        if (action === 'finalize') {
+            const freed = hit.reduce((a, f) => a + (f.confirmed_bytes || 0), 0);
+            if (!window.confirm(`Delete the kept originals of ${files} confirmed file${files === 1 ? '' : 's'} in ${hit.length} series? ` +
+                `This frees ${formatBytes(freed)} and cannot be undone.`)) return;
+        } else if (action === 'confirm' && files > 20 &&
+                   !window.confirm(`Confirm ${files} re-encodes in ${hit.length} series? (Undo stays possible until you finalize.)`)) {
+            return;
+        }
+        const btn = els.bulkbar.querySelector('.bulk-' + action);
+        btn.disabled = true;
+        btn.textContent = 'Working…';
+        const r = await post('/api/bulk', { action, folders: hit.map(f => ({ library: f.library, folder: f.name })) });
+        btn.disabled = false;
+        btn.textContent = btn.dataset.label;
+        if (!r) {
+            showToast('That did not work: the service did not answer.');
+        } else {
+            const what = { confirm: 'confirmed', finalize: 'finalized', retry: 'put back in the queue',
+                           retry_skipped: 'put back in the queue', encode: 'series ticked for encoding',
+                           upnext: 'series moved to the front of the queue' }[action];
+            let text = `${r.done} ${what}`;
+            if (r.kept) text += ` · ${r.kept} stay skipped (already AV1, or a setting leaves them out)`;
+            if (r.failed_count) text += ` · ${r.failed_count} failed: ${r.failed[0].error}`;
+            showToast(text, action === 'upnext' ? 'See queue' : null, '#queue');
+        }
+        if (action === 'upnext') window.dispatchEvent(new CustomEvent('rx:upnext', { detail: {} }));
         fetchFoldersAndLibraries();
     }
 
     function clearSelection() {
         state.selectedFolders.clear();
+        state.cardCache && state.cardCache.clear();
+        renderFolders();
         updateEncodeSelectedUI();
     }
 
     function updateEncodeSelectedUI() {
-        const count = state.selectedFolders.size;
-        if (!els.encodeSelectedBtn) return;
-        els.encodeSelectedBtn.hidden = els.clearSelectedBtn.hidden = state.mode !== 'manual';
-        els.encodeSelectedBtn.disabled = count === 0;
-        els.encodeSelectedBtn.textContent = count > 0 ? `Encode selected (${count})` : 'Encode selected';
+        const bar = els.bulkbar;
+        if (!bar) return;
+        const t = bulkTargets();
+        const n = t.folders.length;
+        bar.classList.toggle('has-pick', t.picked);
+        bar.querySelector('.bulk-scope').textContent = t.picked
+            ? `${n} series selected`
+            : `Applies to the ${n.toLocaleString()} series shown`;
+        const all = bar.querySelector('#select-all');
+        const shown = state.lastKeys || [];
+        all.checked = shown.length > 0 && shown.every(k => state.selectedFolders.has(k));
+        all.indeterminate = !all.checked && state.selectedFolders.size > 0;
+        BULK.forEach(([action, , count]) => {
+            const b = bar.querySelector('.bulk-' + action);
+            const c = t.folders.reduce((a, f) => a + count(f), 0);
+            b.hidden = c === 0 || (action === 'encode' && state.mode !== 'manual');
+            b.textContent = b.disabled ? b.textContent : `${b.dataset.label} (${c.toLocaleString()})`;
+        });
+        bar.querySelector('.bulk-clear').hidden = !t.picked;
     }
 
     function cached(library, name) {

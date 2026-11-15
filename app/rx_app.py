@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import rx_config
 import rx_db
+import rx_hw
 import rx_media
 import rx_model
 import rx_scan
@@ -90,6 +91,7 @@ class App:
             "version": rx_config.VERSION,
             "device": self.cfg.get("device"),
             "libraries": [os.path.basename(r) for r in self.cfg.get("roots", [])],
+            "hardware": {k: v for k, v in (self.cfg.get("hardware") or {}).items() if k != "tried"},
         }
 
     def vmaf_on(self) -> str:
@@ -107,6 +109,10 @@ class App:
         which puts files back that the new setting lets in."""
         before = rx_settings.current(self.cfg)
         after = rx_settings.save(self.conn, self.cfg, changes)
+        if before["encoder_pref"] != after["encoder_pref"]:
+            rx_hw.detect(self.cfg)  # the next file uses it; a file already encoding finishes as it started
+        if before["mode"] != after["mode"]:
+            rx_db.queue_measured(self.conn, after["mode"])  # measured-only files are encoded in Automatic
         if before["codecs"] != after["codecs"] or before["max_height"] != after["max_height"]:
             rx_db.skip_excluded(self.conn, after["codecs"], after["max_height"])
             if self.worker:
@@ -187,6 +193,8 @@ class App:
                    paused: Optional[bool] = None, encode: Optional[bool] = None) -> Dict[str, Any]:
         """Change a folder's priority or pause; returns that folder's summary."""
         rx_db.set_folder(self.conn, library, folder, priority=priority, paused=paused, encode=encode)
+        if encode:
+            rx_db.queue_measured(self.conn, self.cfg.get("mode"), library, folder)
         for f in rx_db.folders(self.conn):
             if f["library"] == library and f["name"] == folder:
                 return f
@@ -224,6 +232,8 @@ class App:
         n = 0
         for it in items:
             rx_db.set_folder(self.conn, it["library"], it["folder"], encode=bool(encode))
+            if encode:
+                rx_db.queue_measured(self.conn, self.cfg.get("mode"), it["library"], it["folder"])
             n += 1
         return {"updated": n}
 
@@ -248,7 +258,7 @@ class App:
         "undo": ("confirmed", rx_stage.undo, "staged"),
         "finalize": ("confirmed", rx_stage.finalize, "encoded"),
         "discard": ("staged", rx_stage.discard, "pending"),
-        "retry": ("failed", None, "pending"),  # a failed file goes back in the queue; nothing on disk to change
+        "retry": ("failed", None, "pending"),  # a failed (or skipped) file goes back in the queue; nothing on disk
     }
 
     def heal(self, row: Dict[str, Any]) -> Dict[str, Any]:
@@ -296,12 +306,17 @@ class App:
                     f"{healed['status']}; the list is fixed now, look again")
             row = healed
         if step is None:
-            if row["status"] != needs:
+            if action == "retry" and row["status"] == "skipped":
+                blocked = rx_model.retry_blocked(row, self.cfg)
+                if blocked:
+                    raise rx_stage.StageError(f"still skipped: {blocked}")
+            elif row["status"] != needs:
                 raise rx_stage.StageError(f"not {needs}: {path}")
         else:
             step(path)  # raises rx_stage.StageError when the files are not in the needed state
         if action == "retry":
-            rx_db.set_result(self.conn, path, status=after, error=None, reason=rx_db.RETRY_REASON)
+            rx_db.set_result(self.conn, path, status=after, error=None, reason=rx_db.RETRY_REASON,
+                             new_bytes=None, vmaf=None, quality=None)
         elif action == "discard":
             rx_db.set_result(self.conn, path, status=after, new_bytes=None, quality=None, vmaf=None,
                              codec_after=None, encoded_at=None, reason="discarded")
@@ -326,6 +341,7 @@ class App:
             "undo": "confirmed",
             "finalize": "confirmed",
             "retry": "failed",
+            "retry_skipped": "skipped",
         }.get(action)
 
         if required_status is None:
@@ -338,14 +354,44 @@ class App:
                     if self.heal(row)["status"] == "encoded" and action == "finalize":
                         done += 1  # its original was already gone: it is finalized now
         files = rx_db.files_with_status(self.conn, required_status, library, folder)
+        kept = 0
         for f in files:
+            if action == "retry_skipped" and rx_model.retry_blocked(f, self.cfg):
+                kept += 1  # already AV1, or a setting still excludes it: not a failure, just stays skipped
+                continue
             try:
-                self.file_action(f["path"], action)
+                self.file_action(f["path"], "retry" if action == "retry_skipped" else action)
                 done += 1
             except Exception as e:
                 failed.append({"path": f["path"], "error": str(e)})
 
-        return {"done": done, "failed": failed}
+        out = {"done": done, "failed": failed}
+        if action == "retry_skipped":
+            out["kept"] = kept
+        return out
+
+    BULK = ("confirm", "finalize", "undo", "discard", "retry", "retry_skipped", "encode", "unencode", "upnext")
+
+    def bulk(self, action: str, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """One action on many series at once (the bulk bar on the library page). items: [{library, folder}]."""
+        if action not in self.BULK:
+            raise ValueError(f"unknown action: {action}")
+        if action in ("encode", "unencode"):
+            return {"done": self.encode_many(items, action == "encode")["updated"], "failed": [], "kept": 0,
+                    "series": len(items)}
+        if action == "upnext":
+            self.reorder(items)
+            return {"done": len(items), "failed": [], "kept": 0, "series": len(items)}
+        done, kept, failed = 0, 0, []
+        for it in items:
+            try:
+                r = self.folder_action(it["library"], it["folder"], action)
+            except KeyError:
+                continue
+            done += r["done"]
+            kept += r.get("kept", 0)
+            failed += r["failed"]
+        return {"done": done, "failed": failed[:50], "failed_count": len(failed), "kept": kept, "series": len(items)}
 
     def frames(self, path: str) -> Dict[str, Any]:
         """Comparison frame pairs of a re-encode: [{t, a (original), b (re-encode)}] as /frames URLs."""

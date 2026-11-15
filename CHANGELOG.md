@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 (2026-11-14)
+
+- Files only measured (in Report mode, or in Manual mode while their series was not ticked) were never encoded after switching to Automatic: they stayed "measured", counted neither as done nor as waiting, and the queue looked empty while there was work left (893 files on the first big library). They now go back in the queue by themselves in Automatic, and in Manual as soon as their series is ticked.
+- Retry for skipped files: one file, "Retry skipped" for a series, or in bulk. Skips from the quality search, damaged reads and older reasons are tried again with today's settings and fixes; files that are already AV1, Dolby Vision 5, or that a setting still leaves out (codec, resolution, HDR) stay skipped and say why. Retried files go first in the queue.
+- Bulk bar above the series list: tick series (or none, for every series the filter shows) and Confirm ready, Finalize (asks first), Retry failed, Retry skipped, Encode (Manual) or Up next in one click, with the number of files each button touches. "Select all shown" ticks the whole filtered list. New `/api/bulk`.
+- Hardware detection: `RX_ENCODER=auto` (new default) finds the GPUs the container can see (render nodes and their PCI vendor, NVIDIA devices), runs a one-second AV1 test encode on each candidate (Intel Quick Sync, VA-API, NVENC) and falls back to the CPU (SVT-AV1). The VA-API driver follows the card (iHD for Intel, radeonsi for AMD; `RX_LIBVA_DRIVER` overrides) and Mesa's VA-API driver is in the image for AMD. The encoder can be chosen on the Settings screen; About shows what was found.
+- Themes: System, Dark, Light (Kreative Kompas) and Grey (a plain neutral light theme), chosen per browser in the header. The overview charts follow the theme.
+- Easier deploy: one compose file with comments for one or several media folders, `RX_BUILD_CONTEXT` to build straight from git without cloning, and an override example for Intel/AMD, NVIDIA and a reverse proxy without host-specific values. README rewritten for 1.0: what it does, the ffmpeg pipeline per encoder, hardware, encodes at once, settings, customising the page.
+
+## 0.2.0 (2026-11-14)
 
 - Progress per library: every library (and all of them together) shows how many files are re-encoded out of the total, as a percentage and a count, with one bar split into finalized, waiting for Confirm/Finalize, measured only, skipped and failed, and what the re-encoded files saved (before → after). A new first tile shows the same for the whole collection. `/api/libraries` carries `reencoded`, `reencoded_pct`, `reencoded_before_bytes`, `reencoded_after_bytes` and `saved_bytes` per library.
 - Paused is unmistakable: the header button turns into an amber "Resume" (with a play icon), the run state next to it turns amber ("Paused · 2 frozen"), an amber banner with its own Resume button says what pausing did, the header line, running jobs and their bars turn amber, and the tab title starts with "⏸ Paused". Running shows a green "Encoding · N", nothing to do a grey "Idle", no answer a red "Offline". Pause/Resume works from the overview page too, and the button changes at once (it is put back if the service refuses).

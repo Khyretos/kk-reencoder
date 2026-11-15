@@ -7,7 +7,7 @@ reading settings from RX_* environment variables and providing defaults.
 import os
 from typing import Any, Dict, List, Optional
 
-VERSION = "0.2.0"
+VERSION = "1.0.0"
 
 
 def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
@@ -74,7 +74,10 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         raise ValueError(f"Invalid mode '{mode}'. Must be 'report', 'stage' or 'manual'.")
 
     # Parse encoder
-    encoder = env.get("RX_ENCODER", "qsv").strip()
+    # auto: find the GPU at start-up and test it (rx_hw.detect); qsv, vaapi, nvenc or svt: use that one
+    encoder = env.get("RX_ENCODER", "auto").strip().lower() or "auto"
+    if encoder not in ("auto", "qsv", "vaapi", "nvenc", "svt"):
+        raise ValueError(f"Invalid encoder '{encoder}'. Must be auto, qsv, vaapi, nvenc or svt.")
 
     # Parse device
     device = env.get("RX_DEVICE", "/dev/dri/renderD128").strip()
@@ -168,7 +171,9 @@ def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     return {
         "roots": roots,
         "mode": mode,
-        "encoder": encoder,
+        "encoder_pref": encoder,
+        # the encoder in use; rx_hw.detect() settles "auto" at start-up (svt until then)
+        "encoder": "svt" if encoder == "auto" else encoder,
         "device": device,
         "target_vmaf": target_vmaf,
         "max_ratio": max_ratio,

@@ -112,6 +112,10 @@ class Worker:
             # Get next file
             f = rx_db.next_file(self.conn)
             if f is None:
+                # nothing waiting: files only measured so far may be due for encoding now (Automatic mode, or a
+                # ticked series in Manual)
+                if rx_db.queue_measured(self.conn, self.cfg.get("mode")):
+                    continue
                 self._stop.wait(self.cfg.get("idle_s", 10))
                 continue
 

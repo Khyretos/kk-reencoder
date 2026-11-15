@@ -11,20 +11,24 @@ ARG FFMPEG_RELEASE=autobuild-2026-09-30-13-08
 ARG FFMPEG_BUILD=ffmpeg-n8.1.3-9-g29e619e767-linux64-gpl-8.1
 ARG FFMPEG_SHA256=97ce978979194b5cf7e06a5e68020dbdaa7a4f3294c5452b6a1bc347100dbb79
 
-# Intel media driver + VPL runtime for QSV, tini, python3; BtbN's static ffmpeg 8.1 (libvmaf, libvpl, vaapi)
+# Intel media driver + VPL runtime for QSV, Mesa's VA-API driver for AMD, tini, python3; BtbN's static ffmpeg 8.1
+# (libvmaf, libvpl, vaapi, nvenc, libsvtav1). NVIDIA's encoder library comes from the host driver through the
+# NVIDIA Container Toolkit at run time.
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
       sed -i 's/Components: main/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources; \
     else sed -i 's/^Components: main.*/Components: main restricted universe multiverse/' /etc/apt/sources.list.d/ubuntu.sources; fi \
  && apt-get update && apt-get install -y --no-install-recommends \
-    intel-media-va-driver-non-free libmfx-gen1.2 libvpl2 ca-certificates tini python3 curl xz-utils \
+    intel-media-va-driver-non-free libmfx-gen1.2 libvpl2 mesa-va-drivers ca-certificates tini python3 curl xz-utils \
  && curl -fsSL -o /tmp/ffmpeg.tar.xz "https://github.com/BtbN/FFmpeg-Builds/releases/download/$FFMPEG_RELEASE/$FFMPEG_BUILD.tar.xz" \
  && echo "$FFMPEG_SHA256  /tmp/ffmpeg.tar.xz" | sha256sum -c - \
  && tar -xJf /tmp/ffmpeg.tar.xz -C /opt && rm /tmp/ffmpeg.tar.xz && mv "/opt/$FFMPEG_BUILD" /opt/ffmpeg \
  && ln -s /opt/ffmpeg/bin/ffmpeg /opt/ffmpeg/bin/ffprobe /usr/local/bin/ \
  && apt-get purge -y curl xz-utils && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
+# LIBVA_DRIVER_NAME is set at start-up for the GPU in use (iHD for Intel, radeonsi for AMD; RX_LIBVA_DRIVER overrides)
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
-    LIBVA_DRIVERS_PATH=/usr/lib/x86_64-linux-gnu/dri LIBVA_DRIVER_NAME=iHD \
+    LIBVA_DRIVERS_PATH=/usr/lib/x86_64-linux-gnu/dri \
+    NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
     RX_DB=/data/reencoder.db
 
 # RX_UID/RX_GID: the owner of the media files (the container runs as that user). The GPU's render group

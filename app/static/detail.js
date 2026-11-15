@@ -86,6 +86,17 @@ window.KKDetail = {
       actionsEl.appendChild(btn);
     }
 
+    // Skipped files: try them again with today's settings and fixes (already AV1 and what Settings still exclude stay)
+    const retryable = data.files.filter(f => f.status === 'skipped' && this.canRetrySkip(f));
+    if (retryable.length > 0) {
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = 'Retry skipped (' + retryable.length + ')';
+      btn.title = 'Put the skipped files back in the queue; files that are already AV1 stay skipped';
+      btn.onclick = () => this.bulkAction('retry_skipped', retryable);
+      actionsEl.appendChild(btn);
+    }
+
     // Staged files
     const stagedFiles = data.files.filter(f => f.status === 'staged');
     if (stagedFiles.length > 0) {
@@ -234,7 +245,7 @@ window.KKDetail = {
           }
         };
         tdActions.appendChild(finalizeBtn);
-      } else if (file.status === 'failed') {
+      } else if (file.status === 'failed' || (file.status === 'skipped' && this.canRetrySkip(file))) {
         const retryBtn = document.createElement('button');
         retryBtn.className = 'btn btn-small';
         retryBtn.textContent = 'Retry';
@@ -345,6 +356,11 @@ window.KKDetail = {
     }
   },
 
+  // a skip that a retry can change: not "already AV1" / Dolby Vision 5 (the file itself), the rest is tried again
+  canRetrySkip: function(file) {
+    return !/^(already AV1|Dolby Vision profile 5)$/.test(file.reason || '');
+  },
+
   bulkAction: async function(action, files) {
     // one call does the whole series (the server walks every file in the needed state)
     try {
@@ -356,6 +372,8 @@ window.KKDetail = {
       const data = await res.json().catch(() => ({}));
       if (!res.ok || (data.failed && data.failed.length)) {
         alert((data.failed && data.failed.length ? data.failed.length + ' of ' + files.length + ' files failed: ' + data.failed[0].error : (data.error || 'Failed')));
+      } else if (data.kept) {
+        alert(data.done + ' put back in the queue; ' + data.kept + ' stay skipped because a setting still leaves them out (codec, resolution or HDR).');
       }
     } catch (e) {
       console.error(e);

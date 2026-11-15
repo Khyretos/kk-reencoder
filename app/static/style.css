@@ -1701,3 +1701,68 @@ input.switch:focus-visible { outline: 2px solid var(--kk-orange); outline-offset
 main.overview section#hero { background: radial-gradient(120% 140% at 50% 0%, color-mix(in srgb, var(--kk-violet) 30%, var(--rx-card)), var(--rx-card)); border-color: var(--rx-line-2); }
 main.overview div.chartbox { background: var(--rx-card-2); border: 1px solid var(--rx-line); }
 main.overview #hero-stats > div.tile { background: var(--rx-card-2); border: 1px solid var(--rx-line); }
+
+/* --- Theme picker and bulk bar ------------------------------------------------------------------ */
+header.appbar select.theme-pick { height: 32px; padding: 0 8px; border-radius: 9px; font: inherit; font-size: .82rem; font-weight: 600;
+  background: var(--rx-card); color: var(--kk-mist); border: 1px solid var(--rx-line-2); cursor: pointer; }
+@media (prefers-color-scheme: light) { header.appbar select.theme-pick { color: #1c1329; } }
+#bulkbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin: 0 0 12px; padding: 8px 12px;
+  border-radius: 12px; background: var(--rx-card); border: 1px solid var(--rx-line); position: sticky; top: 58px; z-index: 20; }
+#bulkbar.has-pick { border-color: var(--kk-orange); box-shadow: 0 0 0 1px var(--kk-orange) inset; }
+#bulkbar .bulk-all { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--kk-mist); cursor: pointer; font-size: .85rem; }
+#bulkbar .bulk-all input { width: 18px; height: 18px; accent-color: var(--kk-orange); margin: 0; }
+#bulkbar .bulk-scope { font-size: .8rem; color: var(--rx-text-2); }
+#bulkbar .bulk-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+#bulkbar .btn { padding: 5px 11px; font-size: .8rem; font-weight: 700; border-radius: 8px; border: 1px solid var(--rx-line-2);
+  background: var(--rx-card-2); color: var(--kk-mist); cursor: pointer; }
+#bulkbar .btn:hover:not([disabled]) { border-color: var(--kk-lilac); }
+#bulkbar .bulk-confirm { border-color: var(--rx-seg-wait); color: var(--rx-seg-wait); }
+#bulkbar .bulk-finalize { border-color: var(--rx-seg-final); color: var(--rx-seg-final); }
+#bulkbar .bulk-retry, #bulkbar .bulk-retry_skipped { border-color: var(--kk-lilac); }
+#bulkbar .bulk-encode { background: var(--kk-orange); color: #1c1329; border-color: var(--kk-orange); }
+@media (max-width: 760px) { #bulkbar { position: static; } #bulkbar .bulk-btns { margin-left: 0; } }
+@media (prefers-color-scheme: light) { #bulkbar .bulk-all, #bulkbar .btn { color: #1c1329; } #bulkbar .bulk-confirm { color: #9a5200; } #bulkbar .bulk-finalize { color: #15803d; } }
+.folder input.pick { opacity: .55; transition: opacity .15s; }
+.folder:hover input.pick, .folder input.pick:checked, .folder input.pick:focus-visible { opacity: 1; }
+
+/* --- Grey: a plain neutral light theme (the light rules above are on; these replace the brand colours) --- */
+html[data-theme="grey"] {
+  --kk-night: #f3f4f6; --kk-plum: #ffffff; --kk-plum-2: #f9fafb;
+  --kk-violet: #374151; --kk-lilac: #4b5563; --kk-neon: #2563eb; --kk-neon-ink: #1d4ed8;
+  --kk-orange: #2563eb; --kk-orange-ink: #1d4ed8; --kk-orange-light: #93c5fd; --kk-pink: #6b7280;
+  --kk-mist: #111827; --kk-muted-dark: #6b7280; --kk-muted-light: #6b7280;
+  --kk-gradient-text: linear-gradient(90deg, #1f2937, #1f2937);
+  --kk-gradient-header: none;
+  --rx-line: #e5e7eb; --rx-line-2: #d1d5db; --rx-card: #ffffff; --rx-card-2: #f9fafb; --rx-track: #e5e7eb;
+  --rx-text-2: #4b5563; --rx-ok: #15803d; --rx-warn: #d97706; --rx-warn-ink: #ffffff;
+  --rx-seg-final: #16a34a; --rx-seg-wait: #2563eb; --rx-seg-meas: #93c5fd; --rx-seg-skip: #9ca3af; --rx-seg-fail: #dc2626;
+  --q-accent: #2563eb; --q-warm: #1d4ed8; --q-tint: #dbeafe; --q-line: #d1d5db; --q-edge: #6b7280; --q-alt: #f9fafb; --q-row: #ffffff; --q-text-2: #4b5563;
+}
+html[data-theme="grey"] body { background: #f3f4f6; color: #111827; }
+html[data-theme="grey"] #queue { --q-accent: #2563eb; --q-warm: #1d4ed8; --q-tint: #dbeafe; --q-line: #d1d5db; --q-edge: #6b7280; --q-alt: #f9fafb; --q-row: #ffffff; --q-text-2: #4b5563; }
+html[data-theme="grey"] header.top.appbar { background: rgba(255,255,255,.9); box-shadow: inset 0 -1px 0 #d1d5db; }
+html[data-theme="grey"] body.is-paused header.top.appbar { box-shadow: inset 0 -3px 0 var(--rx-warn); }
+html[data-theme="grey"] header.appbar nav.tabs a[aria-current="page"] { background: #111827; color: #fff; }
+html[data-theme="grey"] div.viewsw > button[aria-pressed="true"] { background: #111827; border-color: #111827; color: #fff; }
+html[data-theme="grey"] .lp-pct, html[data-theme="grey"] section#tiles .t-progress div.tile-value { background: none; color: #111827; }
+html[data-theme="grey"] .lp-row.lp-total { background: #f3f4f6; }
+html[data-theme="grey"] section#tiles .t-progress { --tile-accent: #2563eb; }
+html[data-theme="grey"] section#tiles .t-expected { --tile-accent: #6b7280; }
+html[data-theme="grey"] section#tiles .t-disk { --tile-accent: #9ca3af; }
+html[data-theme="grey"] .tile-meter > i, html[data-theme="grey"] div.bar > div.fill { background: #2563eb; }
+html[data-theme="grey"] .fold-chev { color: #6b7280; }
+html[data-theme="grey"] .folder .stat-saved { background: none; color: #15803d; }
+html[data-theme="grey"] .set-group legend { color: #374151; }
+html[data-theme="grey"] input.switch:checked { background: #2563eb; border-color: #2563eb; }
+html[data-theme="grey"] input.pick, html[data-theme="grey"] #bulkbar .bulk-all input, html[data-theme="grey"] .set-codecs input { accent-color: #2563eb; }
+html[data-theme="grey"] .folder input.pick:checked { background: #2563eb; box-shadow: none; }
+html[data-theme="grey"] .folder.marked { box-shadow: 0 0 0 1px #2563eb; }
+html[data-theme="grey"] .status-chip.queued { background: #2563eb; color: #fff; }
+html[data-theme="grey"] #bulkbar .bulk-encode, html[data-theme="grey"] dialog.settings-dialog .btn-primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+html[data-theme="grey"] #bulkbar.has-pick { border-color: #2563eb; box-shadow: 0 0 0 1px #2563eb inset; }
+html[data-theme="grey"] #bulkbar .bulk-confirm { color: #1d4ed8; border-color: #2563eb; }
+html[data-theme="grey"] header.appbar #mode.badge { border-color: #d1d5db; color: #374151; }
+html[data-theme="grey"] #filter-sum { border-left-color: #2563eb; background: #fff; }
+html[data-theme="grey"] main.overview section#hero { background: #ffffff; }
+html[data-theme="grey"] #saved-big.hero-num { background: none; -webkit-text-fill-color: #111827; color: #111827; }
+html[data-theme="grey"] *:focus-visible { outline-color: #2563eb; }

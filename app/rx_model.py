@@ -156,6 +156,25 @@ QUALITY_REASON_PREFIXES = ("no smaller encode", "encode not smaller", "never rea
                            "the whole AV1 file")
 
 
+# skips that come from the file itself: Retry cannot change them
+FILE_REASONS = ("already AV1", "Dolby Vision profile 5")
+
+
+def retry_blocked(row: Dict[str, Any], cfg: Dict[str, Any]) -> Optional[str]:
+    """Why Retry cannot put this skipped file back in the queue with the current settings, or None when it can.
+    Skips from the quality search, damaged reads and older reasons can always be tried again."""
+    reason = row.get("reason") or ""
+    if reason in FILE_REASONS:
+        return reason
+    if reason == "HDR" and cfg.get("skip_hdr", True):
+        return "HDR (turn off \"Skip HDR videos\" first)"
+    if reason == "codec not selected" and row.get("codec") not in cfg.get("codecs", []):
+        return f"codec {row.get('codec')} is not ticked in Settings"
+    if reason == "resolution too high" and (row.get("height") or 0) > cfg.get("max_height", 1 << 30):
+        return f"{row.get('height')}p is above the largest resolution in Settings"
+    return None
+
+
 def is_quality_reason(reason: Optional[str]) -> bool:
     """True for a skip that came from the quality search (worth trying again with other settings)."""
     return bool(reason) and reason.startswith(QUALITY_REASON_PREFIXES)

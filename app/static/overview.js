@@ -21,7 +21,7 @@
     function palette() {
         const st = getComputedStyle(document.documentElement);
         const v = (name, fallback) => st.getPropertyValue(name).trim() || fallback;
-        const light = window.matchMedia('(prefers-color-scheme: light)').matches;
+        const light = window.KKTheme ? window.KKTheme.isLight() : window.matchMedia('(prefers-color-scheme: light)').matches;
         return {
             orange: v('--kk-orange', '#f3941f'),
             lilac: v('--kk-lilac', '#cca9ff'),
@@ -313,7 +313,7 @@
         setInterval(pollOverview, 15000);
         setInterval(pollStatus, 2000);
         window.addEventListener('resize', () => Object.values(charts).forEach(c => c.resize()));
-        window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+        window.addEventListener('kk-theme', () => {
             C = palette();
             if (lastOverview) drawOverview(lastOverview);
             if (lastStatus) live(lastStatus.sys);
