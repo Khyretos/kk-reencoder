@@ -109,6 +109,40 @@ def make_frames(path, staged, info, worst, cfg, run):
     return times
 
 
+def _mmss(t):
+    return f"{int(t) // 60}:{int(t) % 60:02d}"
+
+
+def _damage(timeline, info):
+    """Why the original's video looks damaged, from its packets (None: it looks whole, or cannot be read).
+    Holes longer than rx_media.GAP_S, or video that ends more than 2 s before the length the file states."""
+    if not timeline:
+        return None
+    if timeline["gaps"]:
+        at, length = timeline["gaps"][0]
+        more = len(timeline["gaps"]) - 1
+        return f"no video for {length:.0f} s at {_mmss(at)}" + (f" and {more} more holes" if more else "")
+    if timeline["last"] < info["duration_s"] - 2:
+        return f"its video stops at {_mmss(timeline['last'])} although the file says {_mmss(info['duration_s'])}"
+    return None
+
+
+def _lost_video(src, new):
+    """Why the AV1 copy has less video than the original (None: as much). src None: nothing to compare with."""
+    if not src:
+        return None
+    if not new:
+        return "its video packets cannot be read"
+    if new["count"] < src["count"] - max(3, src["count"] // 1000):
+        return f"{new['count']} frames, the original has {src['count']}"
+    if new["last"] < src["last"] - 1:
+        return f"its video ends at {_mmss(new['last'])}, the original's at {_mmss(src['last'])}"
+    if len(new["gaps"]) > len(src["gaps"]):
+        at, length = new["gaps"][0]
+        return f"no video for {length:.0f} s at {_mmss(at)}"
+    return None
+
+
 def _duration_ok(new_info, info):
     """True when the AV1 copy is about as long as the original (at most 2 s apart)."""
     return new_info is not None and abs(new_info["duration_s"] - info["duration_s"]) <= 2
@@ -199,6 +233,16 @@ def process(conn, f, cfg, run, probe=None, progress=None):
     if effective_mode == "stage":
         import rx_media
 
+        # a damaged original (a download with holes, or video that stops before the file's end) gives an AV1 copy
+        # with the same holes, which players show as cut video and audio out of sync: it is left as it is
+        timeline = rx_media.video_timeline(path, info.get("video_index", 0))
+        damage = _damage(timeline, info)
+        if damage:
+            rx_db.set_result(conn, f["path"], status="skipped",
+                             reason=f"the original looks damaged ({damage}); it is left as it is, re-download it")
+            write_report(conn, lib, folder, cfg, in_media=False)
+            return
+
         staged = rx_stage.staged_path(path)
         part = staged + ".part"
         # Ensure extension is kept: name without ext + .part + ext
@@ -239,8 +283,8 @@ def process(conn, f, cfg, run, probe=None, progress=None):
             block.clear()
             rc, out, err = run(cmd, on_line=on_line)
             gpu_cmd = cmd
-        if rc == 0 and gpu_cmd != cmd and not _duration_ok(probe(part), info) and rx_media.video_packets_after(
-                path, (probe(part) or {}).get("duration_s", 0) + 1, info.get("video_index", 0)):
+        if rc == 0 and gpu_cmd != cmd and (not _duration_ok(probe(part), info) or _lost_video(
+                timeline, rx_media.video_timeline(part))):
             # the GPU decoder dropped part of the video (a copy some seconds short): the CPU decode reads it all
             block.clear()
             rc, out, err = run(cmd, on_line=on_line)
@@ -279,16 +323,18 @@ def process(conn, f, cfg, run, probe=None, progress=None):
             return
 
         dur_diff = abs(new_info["duration_s"] - info["duration_s"])
-        cut_off = False
-        if new_info["duration_s"] < info["duration_s"] - 2 and not rx_media.video_packets_after(
-                path, new_info["duration_s"] + 1, info.get("video_index", 0)):
-            # the original itself stops there (a cut-off download: its header promises more than the file has):
-            # the copy holds everything there is to play, so it is kept, with a note
-            cut_off = True
-        if dur_diff > 2 and not cut_off:
+        if dur_diff > 2:
             rx_db.set_result(conn, f["path"], status="failed",
                              error=f"bad duration: the AV1 copy is {new_info['duration_s']:.0f} s long, "
                                    f"the original {info['duration_s']:.0f} s")
+            if os.path.exists(part):
+                os.remove(part)
+            write_report(conn, lib, folder, cfg, in_media=False)
+            return
+        lost = _lost_video(timeline, rx_media.video_timeline(part))
+        if lost:
+            # fewer frames than the original, or new holes: the copied audio would run out of sync with the picture
+            rx_db.set_result(conn, f["path"], status="failed", error=f"the AV1 copy lost video: {lost}")
             if os.path.exists(part):
                 os.remove(part)
             write_report(conn, lib, folder, cfg, in_media=False)
@@ -323,8 +369,7 @@ def process(conn, f, cfg, run, probe=None, progress=None):
             vmaf=vmaf,
             new_bytes=new_size,
             encoded_at=now(),
-            reason=(f"the original is cut off: its video ends at {new_info['duration_s']:.0f} s although the file "
-                    f"says {info['duration_s']:.0f} s; the copy has all of it") if cut_off else None
+            reason=None
         )
 
         write_report(conn, lib, folder, cfg, in_media=False)

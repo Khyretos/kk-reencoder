@@ -72,16 +72,31 @@ class RealFiles(unittest.TestCase):
         cls.full = os.path.join(cls.tmp, "full.mkv")
         subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=24", "-t", "60",
                         "-c:v", "libx264", "-preset", "ultrafast", "-g", "48", "-y", cls.full], check=True)
+        cls.holed = os.path.join(cls.tmp, "holed.mkv")  # 5 s missing in the middle, as a partial download
+        subprocess.run(["ffmpeg", "-v", "error", "-i", cls.full, "-c", "copy", "-bsf:v",
+                        "noise=drop=between(pts*tb\\,20\\,25)", "-y", cls.holed], check=True)
         cls.cut = os.path.join(cls.tmp, "cut.mkv")
         data = open(cls.full, "rb").read()
         with open(cls.cut, "wb") as f:
             f.write(data[: len(data) // 2])
 
-    def test_video_packets_after(self):
-        self.assertTrue(rx_media.video_packets_after(self.full, 50))
-        self.assertTrue(rx_media.video_packets_after(self.cut, 10))
-        self.assertFalse(rx_media.video_packets_after(self.cut, 50))
-        self.assertTrue(rx_media.video_packets_after(os.path.join(self.tmp, "missing.mkv"), 50))  # unknown: True
+    def test_video_timeline(self):
+        full = rx_media.video_timeline(self.full)
+        self.assertEqual(full["count"], 60 * 24)
+        self.assertAlmostEqual(full["last"], 60, delta=0.1)
+        self.assertEqual(full["gaps"], [])
+        cut = rx_media.video_timeline(self.cut)
+        self.assertLess(cut["last"], 40)  # the header says 60 s, the packets stop about half-way
+        self.assertAlmostEqual(rx_media.video_timeline(self.holed)["gaps"][0][0], 20.0, delta=0.1)
+        self.assertIsNone(rx_media.video_timeline(os.path.join(self.tmp, "missing.mkv")))
+
+    def test_damaged_originals_are_named(self):
+        info = rx_media.probe(self.cut)
+        self.assertIn("video stops at", w._damage(rx_media.video_timeline(self.cut), info))
+        info = rx_media.probe(self.holed)
+        self.assertIn("no video for", w._damage(rx_media.video_timeline(self.holed), info))
+        info = rx_media.probe(self.full)
+        self.assertIsNone(w._damage(rx_media.video_timeline(self.full), info))
 
     def test_sample_past_the_real_end_moves_earlier(self):
         info = rx_media.probe(self.cut)
@@ -127,22 +142,53 @@ class CutOffCopy(unittest.TestCase):
             info["duration_s"] = 1300.0  # 100 s short
         return info
 
-    def test_copy_of_a_cut_off_original_is_kept_with_a_note(self):
+    def test_damaged_original_is_skipped_not_staged(self):
         f = rx_db.next_file(self.c)
-        with mock.patch.object(rx_media, "video_packets_after", return_value=False):
+        cut = {"count": 1000, "last": 1300.0, "gaps": []}  # the file says 1400 s, its video stops at 1300 s
+        with mock.patch.object(rx_media, "video_timeline", return_value=cut):
             w.process(self.c, f, self.cfg, FakeFfmpeg(), probe=self.short_probe)
         r = rx_db.get_file(self.c, f["path"])
-        self.assertEqual(r["status"], "staged")
-        self.assertIn("cut off", r["reason"])
+        self.assertEqual(r["status"], "skipped")
+        self.assertIn("damaged", r["reason"])
+        self.assertFalse(os.path.exists(os.path.join(os.path.dirname(f["path"]), ".reencoder")))
+
+    def test_original_with_holes_is_skipped(self):
+        f = rx_db.next_file(self.c)
+        holed = {"count": 900, "last": 1400.0, "gaps": [(72.5, 9.5)]}
+        with mock.patch.object(rx_media, "video_timeline", return_value=holed):
+            w.process(self.c, f, self.cfg, FakeFfmpeg(), probe=fake_probe)
+        r = rx_db.get_file(self.c, f["path"])
+        self.assertEqual(r["status"], "skipped")
+        self.assertIn("no video for 10 s at 1:12", r["reason"])
 
     def test_really_short_copy_still_fails(self):
         f = rx_db.next_file(self.c)
-        with mock.patch.object(rx_media, "video_packets_after", return_value=True):
-            w.process(self.c, f, self.cfg, FakeFfmpeg(), probe=self.short_probe)
+        w.process(self.c, f, self.cfg, FakeFfmpeg(), probe=self.short_probe)
         r = rx_db.get_file(self.c, f["path"])
         self.assertEqual(r["status"], "failed")
         self.assertIn("bad duration", r["error"])
 
+    def test_copy_that_lost_frames_fails(self):
+        f = rx_db.next_file(self.c)
+        src = {"count": 33600, "last": 1400.0, "gaps": []}
+        copy = {"count": 30000, "last": 1400.0, "gaps": []}  # same length, frames missing: audio drifts
+
+        def timeline(path, video_index=0):
+            return copy if ".part" in path else src
+        with mock.patch.object(rx_media, "video_timeline", side_effect=timeline):
+            w.process(self.c, f, self.cfg, FakeFfmpeg(), probe=fake_probe)
+        r = rx_db.get_file(self.c, f["path"])
+        self.assertEqual(r["status"], "failed")
+        self.assertIn("lost video: 30000 frames, the original has 33600", r["error"])
+
+    def test_whole_copy_is_staged(self):
+        f = rx_db.next_file(self.c)
+        same = {"count": 33600, "last": 1400.0, "gaps": []}
+        with mock.patch.object(rx_media, "video_timeline", return_value=same):
+            w.process(self.c, f, self.cfg, FakeFfmpeg(), probe=fake_probe)
+        r = rx_db.get_file(self.c, f["path"])
+        self.assertEqual(r["status"], "staged")
+        self.assertIsNone(r["reason"])
 
 if __name__ == "__main__":
     unittest.main()
