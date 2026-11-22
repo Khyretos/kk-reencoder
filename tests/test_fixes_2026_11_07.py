@@ -192,7 +192,8 @@ class WorkerFallbacks(unittest.TestCase):
         f = rx_db.next_file(self.c)
         import rx_media
         from unittest import mock
-        with mock.patch.object(rx_media, "video_packets_after", return_value=True):  # the original has more video
+        whole = {"count": 33600, "last": 1400.0, "gaps": []}
+        with mock.patch.object(rx_media, "video_timeline", return_value=whole):  # the original has more video
             w.process(self.c, f, self.cfg, counting, probe=probe)
         self.assertEqual(encodes, [True, False])
         self.assertEqual(rx_db.get_file(self.c, f["path"])["status"], "staged")

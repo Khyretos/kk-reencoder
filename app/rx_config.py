@@ -7,7 +7,7 @@ reading settings from RX_* environment variables and providing defaults.
 import os
 from typing import Any, Dict, List, Optional
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 
 def config_from_env(env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:

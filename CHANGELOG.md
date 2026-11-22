@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1 (2026-11-22)
+
+- Damaged originals are no longer re-encoded. Since 2026-11-07 a copy that came out shorter than the file says was kept with the note "the original is cut off ... the copy has all of it". Those originals were partial downloads: video that stops before the audio, or holes with no video for seconds to minutes. The copy carried the same damage, played as cut video with the audio out of step, and Finalize then deleted the only original. Now every original's video packets are read before encoding (a few seconds, no decoding), and one with a hole longer than 2 s, or video that ends more than 2 s before the length the file states, is skipped with "the original looks damaged (...); it is left as it is, re-download it".
+- The AV1 copy is checked against the original's packets as well: fewer frames, an earlier end or new holes fail the file (after one try with the CPU decoder when the GPU decoded it), so a copy whose picture has drifted from its copied audio is never staged.
+
 ## 1.0.0 (2026-11-14)
 
 - Files only measured (in Report mode, or in Manual mode while their series was not ticked) were never encoded after switching to Automatic: they stayed "measured", counted neither as done nor as waiting, and the queue looked empty while there was work left (893 files on the first big library). They now go back in the queue by themselves in Automatic, and in Manual as soon as their series is ticked.

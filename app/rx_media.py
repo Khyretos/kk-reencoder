@@ -31,27 +31,42 @@ def stream_duration(st: Dict[str, Any]) -> Optional[float]:
     return h * 3600 + m * 60 + sec
 
 
-def video_packets_after(path: str, t: float, video_index: int = 0, span: float = 30.0) -> bool:
-    """True when the file has video packets at or after t seconds (seeking, so a cut-off file says False).
-    Used to tell an AV1 copy that is short because the original is cut off (a download that stopped: nothing
-    left to read) from one that really lost video."""
+GAP_S = 2.0  # a stretch this long with no video packet: the file has a hole there (a damaged download)
+
+
+def video_timeline(path: str, video_index: int = 0) -> Optional[Dict[str, Any]]:
+    """Every video packet's time, read without decoding: {'count', 'last' (end of the last packet, s),
+    'gaps': [(at s, length s)] longer than GAP_S}. None when the packets cannot be read.
+    Used to see a damaged original (holes, or video that stops before its audio) before encoding it, and an
+    AV1 copy that lost frames afterwards: a copy that plays shorter than its copied audio is out of sync."""
     try:
         r = subprocess.run(
             ["nice", "-n", "19", "ionice", "-c", "3", "ffprobe", "-v", "error", "-select_streams", f"v:{video_index}",
-             "-show_entries", "packet=pts_time", "-of", "csv=p=0", "-read_intervals", f"{max(0.0, t):.3f}%+{span:g}",
-             path],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+             "-show_entries", "packet=pts_time,duration_time", "-of", "csv=p=0", path],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
     except Exception:
-        return True  # cannot tell: assume there is more, so nothing short is ever kept by mistake
+        return None
     if r.returncode != 0:
-        return True
+        return None
+    pts = []
+    end = 0.0
     for line in r.stdout.splitlines():
+        parts = line.strip().strip(",").split(",")
         try:
-            if float(line.strip().strip(",")) >= t - 0.5:
-                return True
-        except ValueError:
+            t = float(parts[0])
+        except (ValueError, IndexError):
             continue
-    return False
+        try:
+            d = float(parts[1]) if len(parts) > 1 else 0.0
+        except ValueError:
+            d = 0.0
+        pts.append(t)
+        end = max(end, t + d)
+    if not pts:
+        return None
+    pts.sort()
+    gaps = [(round(a, 2), round(b - a, 2)) for a, b in zip(pts, pts[1:]) if b - a > GAP_S]
+    return {"count": len(pts), "last": end, "gaps": gaps}
 
 
 def parse_probe(probe: Dict[str, Any], size: int) -> Optional[Dict[str, Any]]:
